@@ -47,7 +47,10 @@ type Config struct {
 	ConfigDir string `mapstructure:"-" yaml:"-"`
 }
 
-const AgentPromptFile = "PULSE.md"
+const (
+	AgentPromptFile = "PULSE.md"
+	AgentSkillsFile = "SKILLS.md"
+)
 
 func defaultSocketPath() string {
 	if envPath := os.Getenv("MANGO_SOCKET_PATH"); envPath != "" {
@@ -123,6 +126,10 @@ func loadConfig(path string) (*Config, error) {
 
 func AgentPromptPath(configDir, agentName string) string {
 	return filepath.Join(configDir, "agents", agentName, AgentPromptFile)
+}
+
+func AgentSkillsPath(configDir, agentName string) string {
+	return filepath.Join(configDir, "agents", agentName, AgentSkillsFile)
 }
 
 func expandConfig(cfg *Config) {

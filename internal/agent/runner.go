@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/carlosmaranje/mango/internal/llm"
+	"github.com/carlosmaranje/mango/internal/tools"
 )
 
 type TaskEnvelope struct {
@@ -27,6 +28,7 @@ type TaskResult struct {
 type Runner struct {
 	Agent    *Agent
 	Interval time.Duration
+	toolReg  *tools.Registry
 
 	taskCh chan TaskEnvelope
 
@@ -36,13 +38,14 @@ type Runner struct {
 	stopDone chan struct{}
 }
 
-func NewRunner(a *Agent, interval time.Duration) *Runner {
+func NewRunner(a *Agent, toolReg *tools.Registry, interval time.Duration) *Runner {
 	if interval <= 0 {
 		interval = 30 * time.Second
 	}
 	return &Runner{
 		Agent:    a,
 		Interval: interval,
+		toolReg:  toolReg,
 		taskCh:   make(chan TaskEnvelope, 64),
 	}
 }
@@ -132,9 +135,8 @@ func (r *Runner) invokeLLM(ctx context.Context, goal string, history []llm.Messa
 	if r.Agent.SystemPrompt == "" {
 		return "", fmt.Errorf("agent %q has no system prompt (expected PULSE.md)", r.Agent.Name)
 	}
-	messages := []llm.Message{
-		{Role: "system", Content: r.Agent.SystemPrompt},
-	}
+
+	messages := []llm.Message{{Role: "system", Content: r.Agent.SystemPrompt}}
 	if len(history) > 0 {
 		messages = append(messages, history...)
 	} else if r.Agent.Session != nil {
@@ -142,18 +144,52 @@ func (r *Runner) invokeLLM(ctx context.Context, goal string, history []llm.Messa
 	}
 	messages = append(messages, llm.Message{Role: "user", Content: goal})
 
-	out, err := r.Agent.LLM.Complete(ctx, llm.CompletionRequest{
-		Model:     r.Agent.Model,
-		Messages:  messages,
-		MaxTokens: 1024,
-		JSON:      jsonResponse,
-	})
-	if err != nil {
-		return "", err
+	var toolDefs []llm.ToolDef
+	if r.toolReg != nil {
+		toolDefs = r.toolReg.Definitions()
 	}
-	if len(history) == 0 && r.Agent.Session != nil {
-		r.Agent.Session.Append(llm.Message{Role: "user", Content: goal})
-		r.Agent.Session.Append(llm.Message{Role: "assistant", Content: out})
+
+	useSession := len(history) == 0 && r.Agent.Session != nil
+
+	for {
+		resp, err := r.Agent.LLM.Complete(ctx, llm.CompletionRequest{
+			Model:     r.Agent.Model,
+			Messages:  messages,
+			MaxTokens: 1024,
+			JSON:      jsonResponse,
+			Tools:     toolDefs,
+		})
+		if err != nil {
+			return "", err
+		}
+
+		if len(resp.ToolCalls) == 0 {
+			if useSession {
+				r.Agent.Session.Append(llm.Message{Role: "user", Content: goal})
+				r.Agent.Session.Append(llm.Message{Role: "assistant", Content: resp.Content})
+			}
+			return resp.Content, nil
+		}
+
+		// Append the assistant turn (with tool calls) then execute each tool.
+		messages = append(messages, llm.Message{
+			Role:      "assistant",
+			Content:   resp.Content,
+			ToolCalls: resp.ToolCalls,
+		})
+		for _, tc := range resp.ToolCalls {
+			result, execErr := r.toolReg.Execute(ctx, tc.Name, tc.Input)
+			msg := llm.Message{
+				Role:       "tool",
+				ToolCallID: tc.ID,
+				Name:       tc.Name,
+			}
+			if execErr != nil {
+				msg.Content = "error: " + execErr.Error()
+			} else {
+				msg.Content = result
+			}
+			messages = append(messages, msg)
+		}
 	}
-	return out, nil
 }

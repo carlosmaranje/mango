@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -158,7 +159,16 @@ func newConfigAgentAddCmd() *cobra.Command {
 			}
 			agents = append(agents, newAgent)
 			v.Set("agents", agents)
-			return writeViperConfig(v)
+			if err := writeViperConfig(v); err != nil {
+				return err
+			}
+			configDir := filepath.Dir(defaultConfigPath())
+			if configPath != "" {
+				configDir = filepath.Dir(configPath)
+			}
+			fmt.Printf("\nAgent %q added. To define its skills, optionally create:\n  %s\n",
+				name, AgentSkillsPath(configDir, name))
+			return nil
 		},
 	}
 

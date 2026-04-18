@@ -17,18 +17,22 @@ type mockLLM struct {
 	calls     []llm.CompletionRequest
 }
 
-func (m *mockLLM) Complete(ctx context.Context, req llm.CompletionRequest) (string, error) {
+func (m *mockLLM) Complete(ctx context.Context, req llm.CompletionRequest) (llm.CompletionResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	idx := len(m.calls)
 	m.calls = append(m.calls, req)
+	var content string
 	if len(m.responses) > 0 {
 		if idx < len(m.responses) {
-			return m.responses[idx], m.err
+			content = m.responses[idx]
+		} else {
+			content = m.responses[len(m.responses)-1]
 		}
-		return m.responses[len(m.responses)-1], m.err
+	} else {
+		content = m.response
 	}
-	return m.response, m.err
+	return llm.CompletionResponse{Content: content}, m.err
 }
 
 func (m *mockLLM) LastMessages() []llm.Message {

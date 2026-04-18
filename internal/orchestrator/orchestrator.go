@@ -63,7 +63,7 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 	messages = append(messages, llm.Message{Role: "user", Content: "Goal: " + goal})
 
 	for step := 0; step < maxSteps; step++ {
-		raw, err := p.Agent.LLM.Complete(ctx, llm.CompletionRequest{
+		resp, err := p.Agent.LLM.Complete(ctx, llm.CompletionRequest{
 			Model:     p.Agent.Model,
 			Messages:  messages,
 			MaxTokens: 1024,
@@ -72,6 +72,7 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 		if err != nil {
 			return "", fmt.Errorf("orchestrator LLM: %w", err)
 		}
+		raw := resp.Content
 		parsed, err := parseOrchestratorResponse(raw)
 		if err != nil || parsed == nil {
 			log.Printf("orchestrator: model %q returned non-JSON (raw=%q, err=%v). Retrying with corrective hint...", p.Agent.Model, raw, err)

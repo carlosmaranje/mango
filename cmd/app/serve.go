@@ -19,6 +19,7 @@ import (
 	"github.com/carlosmaranje/mango/internal/llm"
 	"github.com/carlosmaranje/mango/internal/memory"
 	"github.com/carlosmaranje/mango/internal/orchestrator"
+	"github.com/carlosmaranje/mango/internal/tools"
 )
 
 func newServeCmd() *cobra.Command {
@@ -42,6 +43,7 @@ func runServe(parent context.Context, cfg *Config) error {
 	registry := agent.NewRegistry()
 	runners := map[string]*agent.Runner{}
 	closers := []func() error{}
+	toolReg := tools.NewRegistry()
 
 	var orchestratorAgent *agent.Agent
 
@@ -81,6 +83,14 @@ func runServe(parent context.Context, cfg *Config) error {
 			return fmt.Errorf("agent %q: %s is empty", ac.Name, promptPath)
 		}
 
+		skillsPath := AgentSkillsPath(cfg.ConfigDir, ac.Name)
+		if skillsBytes, err := os.ReadFile(skillsPath); err == nil {
+			if skills := strings.TrimSpace(string(skillsBytes)); skills != "" {
+				systemPrompt += "\n\n---\n\n" + skills
+				log.Printf("agent %q: loaded skills from %s", ac.Name, skillsPath)
+			}
+		}
+
 		a := &agent.Agent{
 			Name:         ac.Name,
 			WorkDir:      workDir,
@@ -96,7 +106,7 @@ func runServe(parent context.Context, cfg *Config) error {
 		if err := registry.Register(a); err != nil {
 			return err
 		}
-		runner := agent.NewRunner(a, 0)
+		runner := agent.NewRunner(a, toolReg, 0)
 		runners[a.Name] = runner
 		if err := runner.Start(ctx); err != nil {
 			return err
