@@ -95,7 +95,7 @@ func runServe(parent context.Context, cfg *Config) error {
 	}
 
 	if len(runners) == 0 {
-		log.Printf("warn: no agents configured — tasks will fail. Run 'mango agent create' or edit config.yaml.")
+		log.Printf("warn: no agents configured — tasks will fail. Run 'mango agent create' or edit configuration.")
 	}
 
 	var planner *orchestrator.Planner

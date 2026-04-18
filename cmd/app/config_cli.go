@@ -59,7 +59,7 @@ func newConfigSetCmd() *cobra.Command {
 			if v.ConfigFileUsed() == "" {
 				path := configPath
 				if path == "" {
-					path = "config.yaml"
+					path = defaultConfigPath()
 				}
 				return v.WriteConfigAs(path)
 			}
@@ -157,7 +157,7 @@ func newConfigAgentAddCmd() *cobra.Command {
 			if v.ConfigFileUsed() == "" {
 				path := configPath
 				if path == "" {
-					path = "config.yaml"
+					path = defaultConfigPath()
 				}
 				return v.WriteConfigAs(path)
 			}

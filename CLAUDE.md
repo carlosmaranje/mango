@@ -44,6 +44,18 @@ CLI (mango <cmd>)
 
 ---
 
+## Configuration Path Priority
+
+1. **Explicit flag**: `--config /path/to/config.yaml`
+2. **Environment variable**: `MANGO_CONFIG=/path/to/config.yaml`
+3. **System-wide**: `/etc/mango/config.yaml`
+4. **Project config dir**: `./config/config.yaml`
+5. **Current directory**: `./config.yaml`
+
+New configuration created via the CLI (e.g., `mango config set`) defaults to `MANGO_CONFIG` if set, otherwise `/etc/mango/config.yaml` (if no configuration is found).
+
+---
+
 ## Socket Path Configuration
 
 The socket path (Unix domain socket for IPC) can be configured in three ways, in order of priority:
@@ -64,8 +76,8 @@ mango serve
 
 ## Logical Order to Run It
 
-### 1. Configure (`config.yaml`)
-Edit `config.yaml` to define your agents, LLM providers, and optionally Discord and bindings.
+### 1. Configuration
+Edit `/etc/mango/config.yaml` (or use the `mango config` CLI) to define your agents, LLM providers, and optionally Discord and bindings.
 
 ```yaml
 # socket_path is optional (uses default if omitted):

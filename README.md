@@ -34,13 +34,20 @@
 
 ### Configuration
 
-Copy the example configuration and edit it with your API keys and agent definitions:
+By default, Mango looks for configuration in `/etc/mango/config.yaml`, then `./config/config.yaml`, and finally `./config.yaml`.
+You can override the default path by setting the `MANGO_CONFIG` environment variable.
+
+You can use the CLI to initialize and manage your configuration:
 
 ```bash
-cp config/config.example.yaml config.yaml
+# Set your Discord token
+./mango config set discord.token "YOUR_DISCORD_TOKEN"
+
+# Add an agent
+./mango config agent add researcher --provider ollama --model llama3.2
 ```
 
-Example configuration (`config.yaml`):
+Example configuration structure:
 
 ```yaml
 discord:

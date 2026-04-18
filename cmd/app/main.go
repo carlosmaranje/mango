@@ -24,7 +24,7 @@ func main() {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.PersistentFlags().StringVar(&configPath, "config", "", fmt.Sprintf("path to config.yaml (default: ./config.yaml or /etc/%s/config.yaml)", constants.AppName))
+	root.PersistentFlags().StringVar(&configPath, "config", "", fmt.Sprintf("path to config.yaml (default: /etc/%s/config.yaml or ./config.yaml, can be overridden by MANGO_CONFIG)", constants.AppName))
 
 	root.AddCommand(
 		newServeCmd(),

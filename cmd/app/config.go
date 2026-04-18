@@ -58,9 +58,22 @@ func defaultSocketPath() string {
 	return fmt.Sprintf("/var/run/%s/%s.sock", constants.AppName, constants.AppName)
 }
 
+func defaultConfigPath() string {
+	if envPath := os.Getenv("MANGO_CONFIG"); envPath != "" {
+		return envPath
+	}
+	return fmt.Sprintf("/etc/%s/config.yaml", constants.AppName)
+}
+
 func loadRawViper(path string) (*viper.Viper, error) {
 	v := viper.New()
 	v.SetDefault("socket_path", defaultSocketPath())
+
+	// Use MANGO_CONFIG if path is not provided via flag
+	if path == "" {
+		path = os.Getenv("MANGO_CONFIG")
+	}
+
 	if path != "" {
 		v.SetConfigFile(path)
 		if err := v.ReadInConfig(); err != nil {
@@ -72,10 +85,13 @@ func loadRawViper(path string) (*viper.Viper, error) {
 	} else {
 		v.SetConfigName("config")
 		v.SetConfigType("yaml")
-		v.AddConfigPath(".")
-		v.AddConfigPath("./config")
 		v.AddConfigPath(fmt.Sprintf("/etc/%s", constants.AppName))
-		_ = v.ReadInConfig()
+		v.AddConfigPath("./config")
+		v.AddConfigPath(".")
+		if err := v.ReadInConfig(); err != nil {
+			// If no config file found, set the default path for future writes
+			v.SetConfigFile(defaultConfigPath())
+		}
 	}
 	return v, nil
 }

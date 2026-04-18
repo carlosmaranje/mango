@@ -321,7 +321,7 @@ func newAgentCreateCmd() *cobra.Command {
 			if v.ConfigFileUsed() == "" {
 				path := configPath
 				if path == "" {
-					path = "config.yaml"
+					path = defaultConfigPath()
 				}
 				if err := v.WriteConfigAs(path); err != nil {
 					return err
@@ -332,7 +332,7 @@ func newAgentCreateCmd() *cobra.Command {
 				}
 			}
 
-			fmt.Printf("Agent %q added to config.yaml. Restart 'mango serve' to apply.\n", name)
+			fmt.Printf("Agent %q added to %s. Restart 'mango serve' to apply.\n", name, v.ConfigFileUsed())
 			return nil
 		},
 	}
