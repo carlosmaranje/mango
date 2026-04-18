@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/carlosmaranje/goclaw/internal/agent"
@@ -76,7 +77,8 @@ func (p *Planner) Run(ctx context.Context, goal string, d *Dispatcher) (string, 
 		}
 		parsed, err := parsePlannerResponse(raw)
 		if err != nil {
-			return "", fmt.Errorf("planner parse: %w (raw=%q)", err, raw)
+			log.Printf("planner: model %q (%s) returned invalid response: %v (raw=%q)", p.Agent.Model, p.Agent.Role, err, raw)
+			return "", fmt.Errorf("the model %q might not be suitable for the %q role: it returned a non-JSON response", p.Agent.Model, p.Agent.Role)
 		}
 
 		if parsed.Action == "finish" {
