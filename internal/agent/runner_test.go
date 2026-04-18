@@ -35,14 +35,14 @@ func (c *captureLLM) lastMessages() []llm.Message {
 
 func TestRunner_InvokeLLM_RequiresSystemPrompt(t *testing.T) {
 	r := NewRunner(&Agent{Name: "x", LLM: &captureLLM{response: "ok"}}, time.Second)
-	if _, err := r.invokeLLM(context.Background(), "hi", nil); err == nil {
+	if _, err := r.invokeLLM(context.Background(), "hi", nil, false); err == nil {
 		t.Fatal("expected error for empty system prompt")
 	}
 }
 
 func TestRunner_InvokeLLM_RequiresLLM(t *testing.T) {
 	r := NewRunner(&Agent{Name: "x", SystemPrompt: "sp"}, time.Second)
-	if _, err := r.invokeLLM(context.Background(), "hi", nil); err == nil {
+	if _, err := r.invokeLLM(context.Background(), "hi", nil, false); err == nil {
 		t.Fatal("expected error for missing LLM client")
 	}
 }
@@ -51,7 +51,7 @@ func TestRunner_InvokeLLM_UsesSystemPromptAndGoal(t *testing.T) {
 	llmc := &captureLLM{response: "reply"}
 	r := NewRunner(&Agent{Name: "x", LLM: llmc, SystemPrompt: "I am x"}, time.Second)
 
-	out, err := r.invokeLLM(context.Background(), "hello", nil)
+	out, err := r.invokeLLM(context.Background(), "hello", nil, false)
 	if err != nil {
 		t.Fatalf("invokeLLM: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestRunner_InvokeLLM_HistoryPreferredOverSession(t *testing.T) {
 	r := NewRunner(&Agent{Name: "x", LLM: llmc, SystemPrompt: "sp", Session: sess}, time.Second)
 
 	history := []llm.Message{{Role: "user", Content: "from history"}}
-	if _, err := r.invokeLLM(context.Background(), "goal", history); err != nil {
+	if _, err := r.invokeLLM(context.Background(), "goal", history, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -102,7 +102,7 @@ func TestRunner_InvokeLLM_FallsBackToSession(t *testing.T) {
 
 	r := NewRunner(&Agent{Name: "x", LLM: llmc, SystemPrompt: "sp", Session: sess}, time.Second)
 
-	if _, err := r.invokeLLM(context.Background(), "next", nil); err != nil {
+	if _, err := r.invokeLLM(context.Background(), "next", nil, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -117,7 +117,7 @@ func TestRunner_InvokeLLM_FallsBackToSession(t *testing.T) {
 
 func TestRunner_InvokeLLM_LLMError(t *testing.T) {
 	r := NewRunner(&Agent{Name: "x", LLM: &captureLLM{err: errors.New("boom")}, SystemPrompt: "sp"}, time.Second)
-	if _, err := r.invokeLLM(context.Background(), "goal", nil); err == nil {
+	if _, err := r.invokeLLM(context.Background(), "goal", nil, false); err == nil {
 		t.Fatal("expected error to propagate")
 	}
 }
