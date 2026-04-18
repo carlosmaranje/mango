@@ -42,6 +42,7 @@ type Agent struct {
 	Memory       memory.Store
 	Session      *SessionStore
 	AuthCreds    map[string]string
+	SystemPrompt string
 }
 
 func (a *Agent) HasCapability(cap string) bool {

@@ -19,10 +19,11 @@ func (m *mockLLM) Complete(ctx context.Context, req llm.CompletionRequest) (stri
 func TestPlannerRun_NonJSONResponse(t *testing.T) {
 	mock := &mockLLM{response: "This is not JSON"}
 	a := &agent.Agent{
-		Name:  "test-orchestrator",
-		Role:  "orchestrator",
-		Model: "tinydolphin",
-		LLM:   mock,
+		Name:         "test-orchestrator",
+		Role:         "orchestrator",
+		Model:        "tinydolphin",
+		LLM:          mock,
+		SystemPrompt: "You are the orchestrator.",
 	}
 	reg := agent.NewRegistry()
 	p := NewPlanner(a, reg)

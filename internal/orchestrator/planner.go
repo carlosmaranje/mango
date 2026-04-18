@@ -41,20 +41,12 @@ func NewPlanner(a *agent.Agent, reg *agent.Registry) *Planner {
 	return &Planner{Agent: a, Registry: reg, MaxSteps: DefaultMaxSteps}
 }
 
-const plannerSystemPrompt = `You are the orchestrator for a multi-agent system. Decompose the user's goal into tasks routed to specific agents.
- 
-Respond with JSON only — no preamble, no markdown fences. Schema:
-{
-  "action": "continue" | "finish",
-  "tasks": [ { "agent": "<agent_name>", "goal": "<sub-goal>" } ],
-  "final": "<final answer, only when action=finish>"
-}
- 
-Continue until you can return action=finish with a final answer synthesized from prior step results.`
-
 func (p *Planner) Run(ctx context.Context, goal string, history []llm.Message, d *Dispatcher) (string, error) {
 	if p.Agent == nil || p.Agent.LLM == nil {
 		return "", fmt.Errorf("planner agent has no LLM client")
+	}
+	if p.Agent.SystemPrompt == "" {
+		return "", fmt.Errorf("planner agent %q has no system prompt (expected PULSE.md)", p.Agent.Name)
 	}
 	maxSteps := p.MaxSteps
 	if maxSteps <= 0 {
@@ -62,7 +54,7 @@ func (p *Planner) Run(ctx context.Context, goal string, history []llm.Message, d
 	}
 
 	messages := []llm.Message{
-		{Role: "system", Content: plannerSystemPrompt + "\n\n" + p.agentCatalog()},
+		{Role: "system", Content: p.Agent.SystemPrompt + "\n\n" + p.agentCatalog()},
 	}
 	if len(history) > 0 {
 		messages = append(messages, history...)
@@ -91,7 +83,15 @@ func (p *Planner) Run(ctx context.Context, goal string, history []llm.Message, d
 			return raw, nil
 		}
 		if len(parsed.Tasks) == 0 {
-			return "", fmt.Errorf("planner returned action=continue with no tasks")
+			if parsed.Final != "" {
+				return parsed.Final, nil
+			}
+			log.Printf("planner: model %q returned action=continue with no tasks; retrying with corrective hint (raw=%q)", p.Agent.Model, raw)
+			messages = append(messages,
+				llm.Message{Role: "assistant", Content: raw},
+				llm.Message{Role: "user", Content: "Your previous response had action=continue with no tasks, which is invalid. If the goal can be answered from context, respond with action=finish and put the answer in \"final\". Otherwise, dispatch at least one task."},
+			)
+			continue
 		}
 
 		results := d.FanOut(ctx, parsed.Tasks)

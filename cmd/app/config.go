@@ -43,7 +43,11 @@ type Config struct {
 	Discord    DiscordConfig   `mapstructure:"discord" yaml:"discord,omitempty"`
 	Agents     []AgentConfig   `mapstructure:"agents" yaml:"agents,omitempty"`
 	Bindings   []BindingConfig `mapstructure:"bindings" yaml:"bindings,omitempty"`
+
+	ConfigDir string `mapstructure:"-" yaml:"-"`
 }
+
+const AgentPromptFile = "PULSE.md"
 
 func defaultSocketPath() string {
 	if envPath := os.Getenv("MANGO_SOCKET_PATH"); envPath != "" {
@@ -111,7 +115,14 @@ func loadConfig(path string) (*Config, error) {
 	if cfg.SocketPath == "" {
 		cfg.SocketPath = defaultSocketPath()
 	}
+	if used := v.ConfigFileUsed(); used != "" {
+		cfg.ConfigDir = filepath.Dir(used)
+	}
 	return &cfg, nil
+}
+
+func AgentPromptPath(configDir, agentName string) string {
+	return filepath.Join(configDir, "agents", agentName, AgentPromptFile)
 }
 
 func expandConfig(cfg *Config) {

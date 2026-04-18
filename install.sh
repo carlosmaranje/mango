@@ -70,6 +70,22 @@ else
 	echo "  Warning: config/config.default.yaml not found; skipping config install"
 fi
 
+if [ -d config/agents ]; then
+	sudo mkdir -p /etc/mango/agents
+	for agent_dir in config/agents/*/; do
+		[ -d "$agent_dir" ] || continue
+		agent_name=$(basename "$agent_dir")
+		target="/etc/mango/agents/$agent_name/PULSE.md"
+		if [ -f "$target" ]; then
+			echo "  $target already exists — leaving it untouched"
+		else
+			sudo mkdir -p "/etc/mango/agents/$agent_name"
+			sudo cp "$agent_dir/PULSE.md" "$target"
+			echo "  Installed PULSE.md for agent '$agent_name'"
+		fi
+	done
+fi
+
 # Set ownership
 sudo chown -R mango:mango /etc/mango
 sudo chown mango:mango /usr/local/bin/mango

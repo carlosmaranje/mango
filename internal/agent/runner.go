@@ -128,8 +128,11 @@ func (r *Runner) invokeLLM(ctx context.Context, goal string, history []llm.Messa
 	if r.Agent.LLM == nil {
 		return "", fmt.Errorf("agent %q has no LLM client", r.Agent.Name)
 	}
+	if r.Agent.SystemPrompt == "" {
+		return "", fmt.Errorf("agent %q has no system prompt (expected PULSE.md)", r.Agent.Name)
+	}
 	messages := []llm.Message{
-		{Role: "system", Content: fmt.Sprintf("You are agent %q. Capabilities: %v.", r.Agent.Name, r.Agent.Capabilities)},
+		{Role: "system", Content: r.Agent.SystemPrompt},
 	}
 	if len(history) > 0 {
 		messages = append(messages, history...)

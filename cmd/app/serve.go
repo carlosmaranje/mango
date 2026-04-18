@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -70,6 +71,16 @@ func runServe(parent context.Context, cfg *Config) error {
 		}
 		closers = append(closers, mem.Close)
 
+		promptPath := AgentPromptPath(cfg.ConfigDir, ac.Name)
+		promptBytes, err := os.ReadFile(promptPath)
+		if err != nil {
+			return fmt.Errorf("agent %q: read %s: %w", ac.Name, promptPath, err)
+		}
+		systemPrompt := strings.TrimSpace(string(promptBytes))
+		if systemPrompt == "" {
+			return fmt.Errorf("agent %q: %s is empty", ac.Name, promptPath)
+		}
+
 		a := &agent.Agent{
 			Name:         ac.Name,
 			WorkDir:      workDir,
@@ -80,6 +91,7 @@ func runServe(parent context.Context, cfg *Config) error {
 			Memory:       mem,
 			Session:      agent.NewSessionStore(),
 			AuthCreds:    ac.AuthCreds,
+			SystemPrompt: systemPrompt,
 		}
 		if err := registry.Register(a); err != nil {
 			return err

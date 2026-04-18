@@ -76,12 +76,23 @@ mango serve
 
 ## Installation (Linux)
 
-`install.sh` builds the binary, installs the systemd unit, creates the `mango` system user, and writes a starter config to `/etc/mango/config.yaml` from `config/config.default.yaml` (orchestrator + worker scaffolding with empty LLM fields). It then runs two optional interactive prompts:
+`install.sh` builds the binary, installs the systemd unit, creates the `mango` system user, and writes a starter config to `/etc/mango/config.yaml` from `config/config.default.yaml` (orchestrator + worker scaffolding with empty LLM fields). It also seeds the per-agent prompt directory by copying `config/agents/<name>/PULSE.md` → `/etc/mango/agents/<name>/PULSE.md` for any agent whose prompt file doesn't yet exist. It then runs two optional interactive prompts:
 
 - **Discord setup**: asks for a bot token, then whether to bind the bot globally (all channels → orchestrator/planner) or to a comma-separated list of channel IDs (each bound to a chosen agent, default `worker`). A `discord:` block (and `bindings:` if channels were provided) is prepended to the installed config.
 - **LLM setup**: for each of `orchestrator` and `worker`, prompts for provider / model / api_key / base_url and applies them via `mango config agent edit`. Leaving provider blank skips that agent.
 
 Skipping either step prints an `ACTION REQUIRED` block with the file path to edit and the `systemctl daemon-reload && systemctl restart mango` commands to apply changes.
+
+---
+
+## Agent Personalities — PULSE.md
+
+Every agent's system prompt lives in a Markdown file named `PULSE.md` under `<configDir>/agents/<agent-name>/PULSE.md`, where `<configDir>` is the directory containing the loaded `config.yaml`. For the default install that resolves to `/etc/mango/agents/<agent-name>/PULSE.md`.
+
+- **No hardcoded prompts.** `internal/agent/runner.go` and `internal/orchestrator/planner.go` no longer carry a default system prompt string. At startup, `serve.go` reads each agent's `PULSE.md`, trims it, and sets `Agent.SystemPrompt`. Startup fails hard if the file is missing or empty — this is intentional: an agent with no persona should not silently run with stub behavior.
+- **Orchestrator PULSE.md** must encode the JSON schema contract (`action`, `tasks`, `final`) that `parsePlannerResponse` expects. The default shipped in `config/agents/orchestrator/PULSE.md` is the reference — edit carefully. The dynamic agent catalog (names + capabilities pulled from the live registry) is still appended by `planner.agentCatalog()`; don't duplicate it in the MD.
+- **Worker / custom agents** can contain any persona, tone, tool-use guidelines, etc. Edit `PULSE.md`, then `sudo systemctl restart mango` to reload.
+- **Path helper**: `AgentPromptPath(configDir, agentName)` in `cmd/app/config.go` is the single source of truth for where the file lives; the filename constant is `AgentPromptFile = "PULSE.md"`.
 
 ---
 
