@@ -1,0 +1,18 @@
+[Unit]
+Description=Myapp Agent Gateway
+After=network.target
+ 
+[Service]
+ExecStart=/usr/local/bin/myapp serve
+Restart=on-failure
+RestartSec=5s
+User=myapp
+Group=myapp
+RuntimeDirectory=myapp
+StateDirectory=myapp
+StandardOutput=journal
+StandardError=journal
+ 
+[Install]
+WantedBy=multi-user.target
+
