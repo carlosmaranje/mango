@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -126,7 +127,7 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "goal is required")
 			return
 		}
-		task, err := s.dispatcher.Submit(r.Context(), req.Goal, req.Agent)
+		task, err := s.dispatcher.Submit(context.Background(), req.Goal, req.Agent)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
