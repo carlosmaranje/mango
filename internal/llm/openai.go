@@ -13,6 +13,7 @@ import (
 type OpenAICompatClient struct {
 	apiKey  string
 	baseURL string
+	model   string
 	http    *http.Client
 }
 
@@ -20,6 +21,7 @@ func NewOpenAICompatClient(cfg ProviderConfig) *OpenAICompatClient {
 	return &OpenAICompatClient{
 		apiKey:  cfg.APIKey,
 		baseURL: cfg.BaseURL,
+		model:   cfg.Model,
 		http:    &http.Client{Timeout: 120 * time.Second},
 	}
 }
@@ -93,8 +95,12 @@ type openaiResponse struct {
 }
 
 func (c *OpenAICompatClient) Complete(ctx context.Context, req CompletionRequest) (CompletionResponse, error) {
+	model := req.Model
+	if model == "" {
+		model = c.model
+	}
 	oreq := openaiRequest{
-		Model:     req.Model,
+		Model:     model,
 		Messages:  buildOpenAIMessages(req.Messages),
 		MaxTokens: req.MaxTokens,
 		Tools:     buildOpenAITools(req.Tools),

@@ -43,25 +43,14 @@ func (r *Registry) List() []*Agent {
 	return out
 }
 
-func (r *Registry) FindByCapability(cap string) []*Agent {
+func (r *Registry) FindBySkill(skill string) []*Agent {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var out []*Agent
 	for _, a := range r.agents {
-		if a.HasCapability(cap) {
+		if a.HasSkill(skill) {
 			out = append(out, a)
 		}
 	}
 	return out
-}
-
-func (r *Registry) FindByRole(role string) *Agent {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for _, a := range r.agents {
-		if a.Role == role {
-			return a
-		}
-	}
-	return nil
 }

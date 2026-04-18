@@ -1,16 +1,18 @@
-# socket_path is optional. Defaults:
-# - macOS: ~/.mango/mango.sock
-# - Linux: /var/run/mango/mango.sock
-# Override with MANGO_SOCKET_PATH environment variable or set here:
-# socket_path: /custom/path/mango.sock
+socket_path: /var/run/mango/mango.sock
+
+# Agent definitions are loaded from MANGO_AGENTS_DIR (default: /etc/mango/agents/).
+# Skill definitions are loaded from MANGO_SKILLS_DIR (default: /etc/mango/skills/).
+# Each agent's effective system prompt is assembled at startup by reading
+# <agents_dir>/<NAME>.md then appending every skill .md listed under `skills:`
+# (in order), separated by "\n\n---\n\n".
 
 discord:
   token: "${DISCORD_TOKEN}"
 
 agents:
   - name: orchestrator
-    work_dir: /var/lib/mango/agents/orchestrator
     role: orchestrator
+    work_dir: /var/lib/mango/agents/orchestrator
     llm:
       provider: anthropic
       model: claude-sonnet-4-20250514
@@ -18,15 +20,17 @@ agents:
 
   - name: researcher
     work_dir: /var/lib/mango/agents/researcher
-    capabilities: [web_search]
+    skills:
+      - web_search
     llm:
       provider: ollama
       model: llama3.2
-      base_url: http://localhost:11434/v1
 
   - name: coder
     work_dir: /var/lib/mango/agents/coder
-    capabilities: [code_execution]
+    skills:
+      - code_execution
+      - web_search
     llm:
       provider: openai-compatible
       model: qwen2.5-coder
@@ -38,4 +42,3 @@ bindings:
     agent: researcher
   - channel_id: "987654321"
     agent: coder
-

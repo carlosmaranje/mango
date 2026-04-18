@@ -42,40 +42,26 @@ func TestRegistry_ListSorted(t *testing.T) {
 	}
 }
 
-func TestRegistry_FindByCapability(t *testing.T) {
+func TestRegistry_FindBySkill(t *testing.T) {
 	r := NewRegistry()
-	_ = r.Register(&Agent{Name: "a", Capabilities: []string{"search"}})
-	_ = r.Register(&Agent{Name: "b", Capabilities: []string{"code"}})
-	_ = r.Register(&Agent{Name: "c", Capabilities: []string{"search", "code"}})
+	_ = r.Register(&Agent{Name: "a", Skills: []string{"search"}})
+	_ = r.Register(&Agent{Name: "b", Skills: []string{"code"}})
+	_ = r.Register(&Agent{Name: "c", Skills: []string{"search", "code"}})
 
-	if got := r.FindByCapability("search"); len(got) != 2 {
+	if got := r.FindBySkill("search"); len(got) != 2 {
 		t.Errorf("search: expected 2, got %d", len(got))
 	}
-	if got := r.FindByCapability("nope"); len(got) != 0 {
+	if got := r.FindBySkill("nope"); len(got) != 0 {
 		t.Errorf("nope: expected 0, got %d", len(got))
 	}
 }
 
-func TestRegistry_FindByRole(t *testing.T) {
-	r := NewRegistry()
-	o := &Agent{Name: "o", Role: "orchestrator"}
-	_ = r.Register(o)
-	_ = r.Register(&Agent{Name: "w"})
-
-	if got := r.FindByRole("orchestrator"); got != o {
-		t.Errorf("expected orchestrator %p, got %p", o, got)
-	}
-	if got := r.FindByRole("nonexistent"); got != nil {
-		t.Errorf("expected nil, got %v", got)
-	}
-}
-
-func TestAgent_HasCapability(t *testing.T) {
-	a := &Agent{Capabilities: []string{"search", "code"}}
-	if !a.HasCapability("search") {
+func TestAgent_HasSkill(t *testing.T) {
+	a := &Agent{Skills: []string{"search", "code"}}
+	if !a.HasSkill("search") {
 		t.Error("expected true for 'search'")
 	}
-	if a.HasCapability("absent") {
+	if a.HasSkill("absent") {
 		t.Error("expected false for 'absent'")
 	}
 }

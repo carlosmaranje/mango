@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -84,17 +83,17 @@ func newConfigAgentCmd() *cobra.Command {
 }
 
 type agentFlags struct {
-	workDir      string
-	role         string
-	capabilities string
-	provider     string
-	model        string
-	apiKey       string
-	baseURL      string
-	authCreds    string
+	workDir   string
+	role      string
+	skills    string
+	provider  string
+	model     string
+	apiKey    string
+	baseURL   string
+	authCreds string
 }
 
-func parseCapabilities(s string) []string {
+func parseSkills(s string) []string {
 	if s == "" {
 		return nil
 	}
@@ -145,10 +144,10 @@ func newConfigAgentAddCmd() *cobra.Command {
 			}
 
 			newAgent := AgentConfig{
-				Name:         name,
-				WorkDir:      f.workDir,
-				Role:         f.role,
-				Capabilities: parseCapabilities(f.capabilities),
+				Name:    name,
+				WorkDir: f.workDir,
+				Role:    f.role,
+				Skills:  parseSkills(f.skills),
 				LLM: LLMConfig{
 					Provider: f.provider,
 					Model:    f.model,
@@ -162,12 +161,8 @@ func newConfigAgentAddCmd() *cobra.Command {
 			if err := writeViperConfig(v); err != nil {
 				return err
 			}
-			configDir := filepath.Dir(defaultConfigPath())
-			if configPath != "" {
-				configDir = filepath.Dir(configPath)
-			}
-			fmt.Printf("\nAgent %q added. To define its skills, optionally create:\n  %s\n",
-				name, AgentSkillsPath(configDir, name))
+			fmt.Printf("\nAgent %q added. Create its definition file with:\n  mango agent create %s\n",
+				name, name)
 			return nil
 		},
 	}
@@ -204,8 +199,8 @@ func newConfigAgentEditCmd() *cobra.Command {
 					if cmd.Flags().Changed("role") {
 						agents[i].Role = f.role
 					}
-					if cmd.Flags().Changed("capabilities") {
-						agents[i].Capabilities = parseCapabilities(f.capabilities)
+					if cmd.Flags().Changed("skills") {
+						agents[i].Skills = parseSkills(f.skills)
 					}
 					if cmd.Flags().Changed("provider") {
 						agents[i].LLM.Provider = f.provider
@@ -242,7 +237,7 @@ func newConfigAgentEditCmd() *cobra.Command {
 func addAgentFlags(cmd *cobra.Command, f *agentFlags) {
 	cmd.Flags().StringVar(&f.workDir, "work-dir", "", "agent working directory")
 	cmd.Flags().StringVar(&f.role, "role", "", "agent role")
-	cmd.Flags().StringVar(&f.capabilities, "capabilities", "", "comma-separated list of capabilities")
+	cmd.Flags().StringVar(&f.skills, "skills", "", "comma-separated list of skills")
 	cmd.Flags().StringVar(&f.provider, "provider", "", "LLM provider")
 	cmd.Flags().StringVar(&f.model, "model", "", "LLM model")
 	cmd.Flags().StringVar(&f.apiKey, "api-key", "", "API key")

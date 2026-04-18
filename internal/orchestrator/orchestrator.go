@@ -47,7 +47,7 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 		return "", fmt.Errorf("orchestrator agent has no LLM client")
 	}
 	if p.Agent.SystemPrompt == "" {
-		return "", fmt.Errorf("orchestrator agent %q has no system prompt (expected PULSE.md)", p.Agent.Name)
+		return "", fmt.Errorf("orchestrator agent %q has no system prompt", p.Agent.Name)
 	}
 	maxSteps := p.MaxSteps
 	if maxSteps <= 0 {
@@ -64,7 +64,6 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 
 	for step := 0; step < maxSteps; step++ {
 		resp, err := p.Agent.LLM.Complete(ctx, llm.CompletionRequest{
-			Model:     p.Agent.Model,
 			Messages:  messages,
 			MaxTokens: 1024,
 			JSON:      true,
@@ -75,7 +74,7 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 		raw := resp.Content
 		parsed, err := parseOrchestratorResponse(raw)
 		if err != nil || parsed == nil {
-			log.Printf("orchestrator: model %q returned non-JSON (raw=%q, err=%v). Retrying with corrective hint...", p.Agent.Model, raw, err)
+			log.Printf("orchestrator: agent %q returned non-JSON (raw=%q, err=%v). Retrying with corrective hint...", p.Agent.Name, raw, err)
 			messages = append(messages,
 				llm.Message{Role: "assistant", Content: raw},
 				llm.Message{Role: "user", Content: "ERROR: Your response was not a valid JSON object. Please respond ONLY with a JSON object matching the schema. No preamble, no markdown fences. Remember to always include \"action\", \"tasks\", and \"final\" keys."},
@@ -87,7 +86,7 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 			if parsed.Final != "" {
 				return parsed.Final, nil
 			}
-			log.Printf("orchestrator: model %q returned action=finish with empty \"final\"; retrying with corrective hint (raw=%q)", p.Agent.Model, raw)
+			log.Printf("orchestrator: agent %q returned action=finish with empty \"final\"; retrying with corrective hint (raw=%q)", p.Agent.Name, raw)
 			messages = append(messages,
 				llm.Message{Role: "assistant", Content: raw},
 				llm.Message{Role: "user", Content: "ERROR: You set action=finish but provided an empty \"final\" field. Please provide your final answer in the \"final\" field."},
@@ -98,7 +97,7 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 			if parsed.Final != "" {
 				return parsed.Final, nil
 			}
-			log.Printf("orchestrator: model %q returned action=continue with no tasks; retrying with corrective hint (raw=%q)", p.Agent.Model, raw)
+			log.Printf("orchestrator: agent %q returned action=continue with no tasks; retrying with corrective hint (raw=%q)", p.Agent.Name, raw)
 			messages = append(messages,
 				llm.Message{Role: "assistant", Content: raw},
 				llm.Message{Role: "user", Content: "Your previous response had action=continue with no tasks, which is invalid. If the goal can be answered from context, respond with action=finish and put the answer in \"final\". Otherwise, dispatch at least one task."},
@@ -123,10 +122,10 @@ func (p *Orchestrator) agentCatalog() string {
 	var b strings.Builder
 	b.WriteString("Available agents:\n")
 	for _, a := range p.Registry.List() {
-		if a.Role == "orchestrator" {
+		if p.Agent != nil && a == p.Agent {
 			continue
 		}
-		fmt.Fprintf(&b, "- %s (capabilities: %v)\n", a.Name, a.Capabilities)
+		fmt.Fprintf(&b, "- %s (skills: %v)\n", a.Name, a.Skills)
 	}
 	return b.String()
 }

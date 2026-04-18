@@ -14,8 +14,6 @@ func TestOrchestratorRun_RetriesOnNonJSON(t *testing.T) {
 	}
 	a := &agent.Agent{
 		Name:         "test-orchestrator",
-		Role:         "orchestrator",
-		Model:        "gemma",
 		LLM:          mock,
 		SystemPrompt: "You are the orchestrator.",
 	}
@@ -39,8 +37,6 @@ func TestOrchestratorRun_ExceedsMaxStepsOnConstantNonJSON(t *testing.T) {
 	mock := &mockLLM{response: "Still not JSON"}
 	a := &agent.Agent{
 		Name:         "test-orchestrator",
-		Role:         "orchestrator",
-		Model:        "gemma",
 		LLM:          mock,
 		SystemPrompt: "You are the orchestrator.",
 	}

@@ -133,7 +133,7 @@ func (r *Runner) invokeLLM(ctx context.Context, goal string, history []llm.Messa
 		return "", fmt.Errorf("agent %q has no LLM client", r.Agent.Name)
 	}
 	if r.Agent.SystemPrompt == "" {
-		return "", fmt.Errorf("agent %q has no system prompt (expected PULSE.md)", r.Agent.Name)
+		return "", fmt.Errorf("agent %q has no system prompt", r.Agent.Name)
 	}
 
 	messages := []llm.Message{{Role: "system", Content: r.Agent.SystemPrompt}}
@@ -153,7 +153,6 @@ func (r *Runner) invokeLLM(ctx context.Context, goal string, history []llm.Messa
 
 	for {
 		resp, err := r.Agent.LLM.Complete(ctx, llm.CompletionRequest{
-			Model:     r.Agent.Model,
 			Messages:  messages,
 			MaxTokens: 1024,
 			JSON:      jsonResponse,

@@ -8,10 +8,9 @@ import (
 )
 
 type agentStatus struct {
-	Name         string   `json:"name"`
-	Status       string   `json:"status"`
-	Role         string   `json:"role,omitempty"`
-	Capabilities []string `json:"capabilities,omitempty"`
+	Name   string   `json:"name"`
+	Status string   `json:"status"`
+	Skills []string `json:"skills,omitempty"`
 }
 
 type agentRequest struct {
@@ -65,10 +64,9 @@ func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
 			status = "running"
 		}
 		out = append(out, agentStatus{
-			Name:         a.Name,
-			Status:       status,
-			Role:         a.Role,
-			Capabilities: a.Capabilities,
+			Name:   a.Name,
+			Status: status,
+			Skills: a.Skills,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)

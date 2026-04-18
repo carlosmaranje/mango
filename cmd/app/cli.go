@@ -1,15 +1,16 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
+	"path/filepath"
 	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/carlosmaranje/mango/internal/agent"
 )
 
 func newStatusCmd() *cobra.Command {
@@ -39,10 +40,9 @@ func newAgentCmd() *cobra.Command {
 }
 
 type agentStatusDTO struct {
-	Name         string   `json:"name"`
-	Status       string   `json:"status"`
-	Role         string   `json:"role,omitempty"`
-	Capabilities []string `json:"capabilities,omitempty"`
+	Name   string   `json:"name"`
+	Status string   `json:"status"`
+	Skills []string `json:"skills,omitempty"`
 }
 
 func newAgentListCmd() *cobra.Command {
@@ -60,14 +60,14 @@ func newAgentListCmd() *cobra.Command {
 				return err
 			}
 			tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(tw, "NAME\tSTATUS\tROLE\tCAPABILITIES")
+			fmt.Fprintln(tw, "NAME\tSTATUS\tSKILLS")
 			for _, a := range out {
-				caps := ""
-				if len(a.Capabilities) > 0 {
-					b, _ := json.Marshal(a.Capabilities)
-					caps = string(b)
+				skills := ""
+				if len(a.Skills) > 0 {
+					b, _ := json.Marshal(a.Skills)
+					skills = string(b)
 				}
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", a.Name, a.Status, a.Role, caps)
+				fmt.Fprintf(tw, "%s\t%s\t%s\n", a.Name, a.Status, skills)
 			}
 			return tw.Flush()
 		},
@@ -224,115 +224,35 @@ func pollTask(cmd *cobra.Command, client *gatewayClient, id string) error {
 
 func newAgentCreateCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "create",
-		Short: "Create a new agent interactively",
+		Use:   "create <name>",
+		Short: "Scaffold a new agent definition file",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			scanner := bufio.NewScanner(os.Stdin)
-
-			fmt.Print("Agent name: ")
-			if !scanner.Scan() {
-				return fmt.Errorf("failed to read agent name")
-			}
-			name := strings.TrimSpace(scanner.Text())
+			name := args[0]
 			if name == "" {
 				return fmt.Errorf("agent name cannot be empty")
 			}
 
-			fmt.Print("LLM provider [anthropic/openai/ollama]: ")
-			if !scanner.Scan() {
-				return fmt.Errorf("failed to read LLM provider")
-			}
-			provider := strings.TrimSpace(scanner.Text())
-			if provider == "" {
-				return fmt.Errorf("LLM provider cannot be empty")
+			dir := agent.ResolveAgentsDir("")
+			path := agent.AgentDefinitionPath(dir, name)
+
+			if _, err := os.Stat(path); err == nil {
+				return fmt.Errorf("agent %q already exists at %s", name, path)
+			} else if !os.IsNotExist(err) {
+				return fmt.Errorf("stat %s: %w", path, err)
 			}
 
-			fmt.Print("Model: ")
-			if !scanner.Scan() {
-				return fmt.Errorf("failed to read model")
-			}
-			model := strings.TrimSpace(scanner.Text())
-			if model == "" {
-				return fmt.Errorf("model cannot be empty")
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				return fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
 			}
 
-			fmt.Print("API key (or ${ENV_VAR}, leave blank for ollama): ")
-			if !scanner.Scan() {
-				return fmt.Errorf("failed to read API key")
-			}
-			apiKey := strings.TrimSpace(scanner.Text())
-
-			fmt.Print("Base URL (leave blank for defaults): ")
-			if !scanner.Scan() {
-				return fmt.Errorf("failed to read base URL")
-			}
-			baseURL := strings.TrimSpace(scanner.Text())
-
-			fmt.Print("Role (leave blank for none): ")
-			if !scanner.Scan() {
-				return fmt.Errorf("failed to read role")
-			}
-			role := strings.TrimSpace(scanner.Text())
-
-			fmt.Print("Capabilities (comma-separated, leave blank for none): ")
-			if !scanner.Scan() {
-				return fmt.Errorf("failed to read capabilities")
-			}
-			capsStr := strings.TrimSpace(scanner.Text())
-			capabilities := parseCapabilities(capsStr)
-
-			fmt.Print("Work directory (leave blank for default): ")
-			if !scanner.Scan() {
-				return fmt.Errorf("failed to read work directory")
-			}
-			workDir := strings.TrimSpace(scanner.Text())
-
-			v, err := loadRawViper(configPath)
-			if err != nil {
-				return err
+			template := fmt.Sprintf("# %s\n\nDescribe this agent's role, persona, and constraints here.\n",
+				filepath.Base(path[:len(path)-len(filepath.Ext(path))]))
+			if err := os.WriteFile(path, []byte(template), 0o644); err != nil {
+				return fmt.Errorf("write %s: %w", path, err)
 			}
 
-			var agents []AgentConfig
-			if err := v.UnmarshalKey("agents", &agents); err != nil {
-				return err
-			}
-
-			for _, a := range agents {
-				if a.Name == name {
-					return fmt.Errorf("agent %q already exists", name)
-				}
-			}
-
-			newAgent := AgentConfig{
-				Name:         name,
-				WorkDir:      workDir,
-				Role:         role,
-				Capabilities: capabilities,
-				LLM: LLMConfig{
-					Provider: provider,
-					Model:    model,
-					APIKey:   apiKey,
-					BaseURL:  baseURL,
-				},
-			}
-			agents = append(agents, newAgent)
-			v.Set("agents", agents)
-
-			if v.ConfigFileUsed() == "" {
-				path := configPath
-				if path == "" {
-					path = defaultConfigPath()
-				}
-				if err := v.WriteConfigAs(path); err != nil {
-					return err
-				}
-			} else {
-				if err := v.WriteConfig(); err != nil {
-					return err
-				}
-			}
-
-			fmt.Printf("Agent %q added to %s. Restart 'mango serve' to apply.\n", name, v.ConfigFileUsed())
+			fmt.Printf("Created agent definition at %s\n", path)
 			return nil
 		},
 	}

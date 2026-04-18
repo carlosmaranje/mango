@@ -34,16 +34,14 @@ func (s *SessionStore) Snapshot() []llm.Message {
 type Agent struct {
 	Name         string
 	WorkDir      string
-	Model        string
-	Role         string
-	Capabilities []string
 	LLM          llm.Client
+	Skills       []string
+	SystemPrompt string
 	Memory       memory.Store
 	Session      *SessionStore
 	AuthCreds    map[string]string
-	SystemPrompt string
 }
 
-func (a *Agent) HasCapability(cap string) bool {
-	return slices.Contains(a.Capabilities, cap)
+func (a *Agent) HasSkill(name string) bool {
+	return slices.Contains(a.Skills, name)
 }

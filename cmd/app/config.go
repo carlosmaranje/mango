@@ -20,12 +20,12 @@ type LLMConfig struct {
 }
 
 type AgentConfig struct {
-	Name         string            `mapstructure:"name" yaml:"name"`
-	WorkDir      string            `mapstructure:"work_dir" yaml:"work_dir,omitempty"`
-	Role         string            `mapstructure:"role" yaml:"role,omitempty"`
-	Capabilities []string          `mapstructure:"capabilities" yaml:"capabilities,omitempty"`
-	LLM          LLMConfig         `mapstructure:"llm" yaml:"llm"`
-	AuthCreds    map[string]string `mapstructure:"auth_creds" yaml:"auth_creds,omitempty"`
+	Name      string            `mapstructure:"name" yaml:"name"`
+	WorkDir   string            `mapstructure:"work_dir" yaml:"work_dir,omitempty"`
+	Role      string            `mapstructure:"role" yaml:"role,omitempty"`
+	Skills    []string          `mapstructure:"skills" yaml:"skills,omitempty"`
+	LLM       LLMConfig         `mapstructure:"llm" yaml:"llm"`
+	AuthCreds map[string]string `mapstructure:"auth_creds" yaml:"auth_creds,omitempty"`
 }
 
 type BindingConfig struct {
@@ -46,11 +46,6 @@ type Config struct {
 
 	ConfigDir string `mapstructure:"-" yaml:"-"`
 }
-
-const (
-	AgentPromptFile = "PULSE.md"
-	AgentSkillsFile = "SKILLS.md"
-)
 
 func defaultSocketPath() string {
 	if envPath := os.Getenv("MANGO_SOCKET_PATH"); envPath != "" {
@@ -122,14 +117,6 @@ func loadConfig(path string) (*Config, error) {
 		cfg.ConfigDir = filepath.Dir(used)
 	}
 	return &cfg, nil
-}
-
-func AgentPromptPath(configDir, agentName string) string {
-	return filepath.Join(configDir, "agents", agentName, AgentPromptFile)
-}
-
-func AgentSkillsPath(configDir, agentName string) string {
-	return filepath.Join(configDir, "agents", agentName, AgentSkillsFile)
 }
 
 func expandConfig(cfg *Config) {

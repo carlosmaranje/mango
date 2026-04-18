@@ -18,6 +18,7 @@ const (
 type AnthropicClient struct {
 	apiKey  string
 	baseURL string
+	model   string
 	http    *http.Client
 }
 
@@ -29,6 +30,7 @@ func NewAnthropicClient(cfg ProviderConfig) *AnthropicClient {
 	return &AnthropicClient{
 		apiKey:  cfg.APIKey,
 		baseURL: base,
+		model:   cfg.Model,
 		http:    &http.Client{Timeout: 120 * time.Second},
 	}
 }
@@ -99,8 +101,12 @@ func (c *AnthropicClient) Complete(ctx context.Context, req CompletionRequest) (
 
 	system, msgs := buildAnthropicMessages(req.Messages)
 
+	model := req.Model
+	if model == "" {
+		model = c.model
+	}
 	body, err := json.Marshal(anthropicRequest{
-		Model:     req.Model,
+		Model:     model,
 		MaxTokens: maxTokens,
 		System:    system,
 		Messages:  msgs,

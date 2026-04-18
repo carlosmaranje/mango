@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -19,6 +18,7 @@ import (
 	"github.com/carlosmaranje/mango/internal/llm"
 	"github.com/carlosmaranje/mango/internal/memory"
 	"github.com/carlosmaranje/mango/internal/orchestrator"
+	"github.com/carlosmaranje/mango/internal/skill"
 	"github.com/carlosmaranje/mango/internal/tools"
 )
 
@@ -39,6 +39,10 @@ func newServeCmd() *cobra.Command {
 func runServe(parent context.Context, cfg *Config) error {
 	ctx, cancel := signal.NotifyContext(parent, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+
+	agentsDir := agent.ResolveAgentsDir("")
+	skillsDir := skill.ResolveSkillsDir("")
+	skillLoader := skill.NewLoader(skillsDir)
 
 	registry := agent.NewRegistry()
 	runners := map[string]*agent.Runner{}
@@ -73,35 +77,23 @@ func runServe(parent context.Context, cfg *Config) error {
 		}
 		closers = append(closers, mem.Close)
 
-		promptPath := AgentPromptPath(cfg.ConfigDir, ac.Name)
-		promptBytes, err := os.ReadFile(promptPath)
+		systemPrompt, err := agent.ComposeSystemPrompt(agentsDir, ac.Name, ac.Skills, skillLoader)
 		if err != nil {
-			return fmt.Errorf("agent %q: read %s: %w", ac.Name, promptPath, err)
+			return fmt.Errorf("agent %q: %w", ac.Name, err)
 		}
-		systemPrompt := strings.TrimSpace(string(promptBytes))
-		if systemPrompt == "" {
-			return fmt.Errorf("agent %q: %s is empty", ac.Name, promptPath)
-		}
-
-		skillsPath := AgentSkillsPath(cfg.ConfigDir, ac.Name)
-		if skillsBytes, err := os.ReadFile(skillsPath); err == nil {
-			if skills := strings.TrimSpace(string(skillsBytes)); skills != "" {
-				systemPrompt += "\n\n---\n\n" + skills
-				log.Printf("agent %q: loaded skills from %s", ac.Name, skillsPath)
-			}
+		if len(ac.Skills) > 0 {
+			log.Printf("agent %q: loaded skills %v from %s", ac.Name, ac.Skills, skillsDir)
 		}
 
 		a := &agent.Agent{
 			Name:         ac.Name,
 			WorkDir:      workDir,
-			Model:        ac.LLM.Model,
-			Role:         ac.Role,
-			Capabilities: ac.Capabilities,
 			LLM:          llmClient,
+			Skills:       ac.Skills,
+			SystemPrompt: systemPrompt,
 			Memory:       mem,
 			Session:      agent.NewSessionStore(),
 			AuthCreds:    ac.AuthCreds,
-			SystemPrompt: systemPrompt,
 		}
 		if err := registry.Register(a); err != nil {
 			return err
@@ -111,7 +103,7 @@ func runServe(parent context.Context, cfg *Config) error {
 		if err := runner.Start(ctx); err != nil {
 			return err
 		}
-		if a.Role == "orchestrator" {
+		if ac.Role == "orchestrator" {
 			orchestratorAgent = a
 		}
 	}

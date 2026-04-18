@@ -74,21 +74,10 @@ else
 	echo "  Warning: config/config.default.yaml not found; skipping"
 fi
 
-# Copy PULSE.md files for each agent
-if [ -d config/agents ]; then
-	for agent_dir in config/agents/*/; do
-		[ -d "$agent_dir" ] || continue
-		agent_name=$(basename "$agent_dir")
-		target="$MANGO_DIR/agents/$agent_name/PULSE.md"
-		if [ -f "$target" ]; then
-			echo "  $target already exists — leaving it untouched"
-		else
-			mkdir -p "$MANGO_DIR/agents/$agent_name"
-			cp "$agent_dir/PULSE.md" "$target"
-			echo "  Installed PULSE.md for agent '$agent_name'"
-		fi
-	done
-fi
+# Scaffold agent/skill directories (user populates with `mango agent create` + skill .md files)
+mkdir -p "$MANGO_DIR/agents" "$MANGO_DIR/skills"
+echo "  Created $MANGO_DIR/agents and $MANGO_DIR/skills"
+echo "  Run 'mango agent create <name>' to scaffold an agent definition"
 
 # Set up log directory
 mkdir -p "$LOG_DIR"
