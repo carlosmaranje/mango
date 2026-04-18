@@ -21,31 +21,40 @@
 
 ### Installation
 
-> Linux only. Requires Go, `git`, and `systemd`.
-
 **1. Clone the repository:**
 ```bash
 git clone https://github.com/carlosmaranje/mango.git
 cd mango
 ```
 
-**2. Run the installer:**
+**2. Run the installer for your platform:**
+
+#### Linux (requires Go, `git`, `systemd`)
 ```bash
 ./install.sh
 ```
-
 The script builds the binary, creates a `mango` system user, installs the systemd unit, and walks you through configuring your LLM providers and optional Discord bot interactively.
 
-**3. Enable and start the service:**
 ```bash
 sudo systemctl enable mango
 sudo systemctl start mango
 ```
 
-**To uninstall:**
+**To uninstall:** `./install.sh uninstall`
+
+#### macOS (requires Go, `git`)
 ```bash
-./install.sh uninstall
+./install-mac.sh
 ```
+The script builds the binary, sets up config at `~/.mango/config.yaml`, installs a launchd agent (auto-starts on login), and walks you through the same interactive setup.
+
+The agent starts automatically after install. To manage it manually:
+```bash
+launchctl unload  ~/Library/LaunchAgents/com.mango.gateway.plist
+launchctl load    ~/Library/LaunchAgents/com.mango.gateway.plist
+```
+
+**To uninstall:** `./install-mac.sh uninstall`
 
 ### Configuration
 

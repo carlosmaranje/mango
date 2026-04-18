@@ -9,15 +9,23 @@
   <array>
     <string>/usr/local/bin/mango</string>
     <string>serve</string>
+    <string>--config</string>
+    <string>MANGO_CONFIG_PATH</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>MANGO_HOME</string>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/usr/local/var/log/mango.log</string>
+  <string>MANGO_LOG_DIR/mango.log</string>
   <key>StandardErrorPath</key>
-  <string>/usr/local/var/log/mango.err</string>
+  <string>MANGO_LOG_DIR/mango.err</string>
 </dict>
 </plist>
-
