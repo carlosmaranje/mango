@@ -1,0 +1,3 @@
+agents:
+    - name: manager
+socket_path: /Users/carlosmaranje/.mango/mango.sock
