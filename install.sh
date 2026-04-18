@@ -12,6 +12,7 @@ if [[ "$1" == "uninstall" ]]; then
 		git clone --depth 1 "$REPO_URL" "$TMP_DIR"
 		cd "$TMP_DIR"
 	fi
+	chmod +x uninstall.sh
 	exec ./uninstall.sh
 fi
 
