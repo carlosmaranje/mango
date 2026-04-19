@@ -63,6 +63,7 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 	messages = append(messages, llm.Message{Role: "user", Content: "Goal: " + goal})
 
 	for step := 0; step < maxSteps; step++ {
+		log.Printf("orchestrator: step %d — sending %d messages to LLM", step, len(messages))
 		resp, err := p.Agent.LLM.Complete(ctx, llm.CompletionRequest{
 			Messages:  messages,
 			MaxTokens: 1024,
@@ -72,6 +73,7 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 			return "", fmt.Errorf("orchestrator LLM: %w", err)
 		}
 		raw := resp.Content
+		log.Printf("orchestrator: step %d — raw response=%q", step, raw)
 		parsed, err := parseOrchestratorResponse(raw)
 		if err != nil || parsed == nil {
 			log.Printf("orchestrator: agent %q returned non-JSON (raw=%q, err=%v). Retrying with corrective hint...", p.Agent.Name, raw, err)
@@ -82,8 +84,11 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 			continue
 		}
 
+		log.Printf("orchestrator: step %d — parsed action=%q tasks=%d", step, parsed.Action, len(parsed.Tasks))
+
 		if parsed.Action == "finish" {
 			if parsed.Final != "" {
+				log.Printf("orchestrator: step %d — finished with final=%q", step, parsed.Final)
 				return parsed.Final, nil
 			}
 			log.Printf("orchestrator: agent %q returned action=finish with empty \"final\"; retrying with corrective hint (raw=%q)", p.Agent.Name, raw)
@@ -105,10 +110,13 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 			continue
 		}
 
+		log.Printf("orchestrator: step %d — dispatching %d tasks", step, len(parsed.Tasks))
 		results := d.FanOut(ctx, parsed.Tasks)
+		stepResultsStr := renderStepResults(results)
+		log.Printf("orchestrator: step %d — fanout complete: %s", step, stepResultsStr)
 		messages = append(messages,
 			llm.Message{Role: "assistant", Content: raw},
-			llm.Message{Role: "user", Content: renderStepResults(results)},
+			llm.Message{Role: "user", Content: stepResultsStr},
 		)
 	}
 

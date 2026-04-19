@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -151,7 +152,8 @@ func (r *Runner) invokeLLM(ctx context.Context, goal string, history []llm.Messa
 
 	useSession := len(history) == 0 && r.Agent.Session != nil
 
-	for {
+	for step := 1; ; step++ {
+		log.Printf("agent %q: step %d — sending %d messages to LLM (tools: %d)", r.Agent.Name, step, len(messages), len(toolDefs))
 		resp, err := r.Agent.LLM.Complete(ctx, llm.CompletionRequest{
 			Messages:  messages,
 			MaxTokens: 1024,
@@ -161,6 +163,8 @@ func (r *Runner) invokeLLM(ctx context.Context, goal string, history []llm.Messa
 		if err != nil {
 			return "", err
 		}
+
+		log.Printf("agent %q: step %d — content=%q toolCalls=%d", r.Agent.Name, step, resp.Content, len(resp.ToolCalls))
 
 		if len(resp.ToolCalls) == 0 {
 			if useSession {
@@ -177,6 +181,7 @@ func (r *Runner) invokeLLM(ctx context.Context, goal string, history []llm.Messa
 			ToolCalls: resp.ToolCalls,
 		})
 		for _, tc := range resp.ToolCalls {
+			log.Printf("agent %q: step %d — tool call %q input=%s", r.Agent.Name, step, tc.Name, tc.Input)
 			result, execErr := r.toolReg.Execute(ctx, tc.Name, tc.Input)
 			msg := llm.Message{
 				Role:       "tool",
@@ -184,8 +189,10 @@ func (r *Runner) invokeLLM(ctx context.Context, goal string, history []llm.Messa
 				Name:       tc.Name,
 			}
 			if execErr != nil {
+				log.Printf("agent %q: step %d — tool %q error: %v", r.Agent.Name, step, tc.Name, execErr)
 				msg.Content = "error: " + execErr.Error()
 			} else {
+				log.Printf("agent %q: step %d — tool %q result=%s", r.Agent.Name, step, tc.Name, result)
 				msg.Content = result
 			}
 			messages = append(messages, msg)
