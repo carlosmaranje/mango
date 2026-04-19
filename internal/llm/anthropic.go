@@ -226,9 +226,13 @@ func buildAnthropicTools(defs []ToolDef) []anthropicTool {
 				schema.Required = append(schema.Required, p.Name)
 			}
 		}
+		desc := d.Description
+		if d.Returns != "" {
+			desc += "\nReturns: " + d.Returns
+		}
 		out[i] = anthropicTool{
 			Name:        d.Name,
-			Description: d.Description,
+			Description: desc,
 			InputSchema: schema,
 		}
 	}

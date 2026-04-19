@@ -49,6 +49,10 @@ func runServe(parent context.Context, cfg *Config) error {
 	closers := []func() error{}
 	toolReg := tools.NewRegistry()
 
+	if err := toolReg.Register(tools.NewGoSolarTool()); err != nil {
+		return fmt.Errorf("failed to register gosolar tool: %w", err)
+	}
+
 	var orchestratorAgent *agent.Agent
 
 	for _, ac := range cfg.Agents {

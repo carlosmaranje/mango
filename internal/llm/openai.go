@@ -226,11 +226,15 @@ func buildOpenAITools(defs []ToolDef) []openaiTool {
 				params.Required = append(params.Required, p.Name)
 			}
 		}
+		desc := d.Description
+		if d.Returns != "" {
+			desc += "\nReturns: " + d.Returns
+		}
 		out[i] = openaiTool{
 			Type: "function",
 			Function: openaiFunction{
 				Name:        d.Name,
-				Description: d.Description,
+				Description: desc,
 				Parameters:  params,
 			},
 		}

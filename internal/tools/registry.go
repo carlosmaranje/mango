@@ -62,6 +62,7 @@ func (r *Registry) Definitions() []llm.ToolDef {
 		def := llm.ToolDef{
 			Name:        t.Name(),
 			Description: t.Description(),
+			Returns:     t.Returns(),
 		}
 		for _, p := range t.Parameters() {
 			def.Parameters = append(def.Parameters, llm.ToolParam{

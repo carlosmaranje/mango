@@ -21,6 +21,7 @@ type ToolDef struct {
 	Name        string
 	Description string
 	Parameters  []ToolParam
+	Returns     string
 }
 
 type ToolCall struct {
