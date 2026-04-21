@@ -156,7 +156,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "?":
 			m.showHelp = true
 
-		case "tab", "right":
+		case "tab":
 			m.section = (m.section + 1) % section(len(sectionNames))
 			if m.section == sectionTasks {
 				m.input.Focus()
@@ -164,7 +164,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input.Blur()
 			}
 
-		case "shift+tab", "left":
+		case "shift+tab":
 			m.section = (m.section + section(len(sectionNames)) - 1) % section(len(sectionNames))
 			if m.section == sectionTasks {
 				m.input.Focus()
@@ -225,8 +225,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case healthMsg:
+		wasOK := m.gatewayOK
 		m.gatewayOK = bool(msg)
-		if m.gatewayOK {
+		if m.gatewayOK && !wasOK {
 			cmds = append(cmds, loadAgents(m.client, m.ctx))
 		}
 
@@ -278,10 +279,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		cmds = append(cmds, tick())
+		cmds = append(cmds, checkHealth(m.client, m.ctx))
 		if m.gatewayOK {
 			cmds = append(cmds, loadAgents(m.client, m.ctx))
-		} else {
-			cmds = append(cmds, checkHealth(m.client, m.ctx))
 		}
 	}
 
@@ -548,7 +548,7 @@ func (m tuiModel) viewStatusBar() string {
 	}
 
 	socket := styleFaint.Render(" (" + m.gatewayMsg + ")")
-	hint := styleFaint.Render("tab next  ? help  q quit")
+	hint := styleFaint.Render("tab/shift+tab nav  ? help  q quit")
 	gap := m.width - lipgloss.Width(gwStatus) - lipgloss.Width(socket) - lipgloss.Width(hint) - 4
 	if gap < 1 {
 		gap = 1
@@ -562,7 +562,7 @@ func (m tuiModel) viewHelp() string {
 	title := styleTitleBar.Width(m.width).Render("🥭 mango — keyboard shortcuts")
 
 	keys := [][]string{
-		{"tab / shift+tab", "switch sections"},
+		{"tab / shift+tab", "switch sections (←/→ move cursor in chat)"},
 		{"enter", "submit task / confirm"},
 		{"ctrl+a", "toggle agent name input"},
 		{"esc", "cancel / close"},
