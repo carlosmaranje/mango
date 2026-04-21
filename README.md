@@ -1,6 +1,19 @@
-# 🥭 Mango
 
-**Mango** is a multi-agent orchestration gateway that brings the power of agentic AI to Discord and your terminal. It allows you to define specialized agents with different capabilities and LLM backends, orchestrated by a central orchestrator to solve complex tasks.
+  
+                                ███╗   ███╗ █████╗ ███╗   ██╗ ██████╗  ██████╗
+                                ████╗ ████║██╔══██╗████╗  ██║██╔════╝ ██╔═══██╗
+                                ██╔████╔██║███████║██╔██╗ ██║██║  ███╗██║   ██║
+                                ██║╚██╔╝██║██╔══██║██║╚██╗██║██║   ██║██║   ██║
+                                ██║ ╚═╝ ██║██║  ██║██║ ╚████║╚██████╔╝╚██████╔╝
+                                ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝  ╚═════╝
+                                          ...napping in progress
+
+
+> Mango is a lazy orange cat who loves to eat, sleep, and — on good days — orchestrate AI agents.
+> It's also a tropical fruit.
+> Mostly, though, it naps.
+
+**Mango** is a multi-agent orchestration gateway that brings the power of agentic AI to Discord and your terminal. Define specialized agents with different capabilities and LLM backends; a central orchestrator decomposes goals into parallel sub-tasks and fans them out while the cat sleeps.
 
 ## ✨ Features
 
