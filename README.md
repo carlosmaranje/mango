@@ -6,7 +6,7 @@
                                 ██║╚██╔╝██║██╔══██║██║╚██╗██║██║   ██║██║   ██║
                                 ██║ ╚═╝ ██║██║  ██║██║ ╚████║╚██████╔╝╚██████╔╝
                                 ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝  ╚═════╝
-                                ( ...napping in progress )
+                                         ( ...napping in progress )
 
 
 > Mango is a lazy orange cat who loves to eat, sleep, and — on good days — orchestrate AI agents.
