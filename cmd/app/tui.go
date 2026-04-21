@@ -387,11 +387,29 @@ func (m tuiModel) viewContent() string {
 	return ""
 }
 
+var logoLines = [6]string{
+	`███╗   ███╗ █████╗ ███╗   ██╗ ██████╗  ██████╗`,
+	`████╗ ████║██╔══██╗████╗  ██║██╔════╝ ██╔═══██╗`,
+	`██╔████╔██║███████║██╔██╗ ██║██║  ███╗██║   ██║`,
+	`██║╚██╔╝██║██╔══██║██║╚██╗██║██║   ██║██║   ██║`,
+	`██║ ╚═╝ ██║██║  ██║██║ ╚████║╚██████╔╝╚██████╔╝`,
+	`╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝  ╚═════╝`,
+}
+
 func (m tuiModel) viewTasks() string {
 	w := m.contentWidth() - 2
 	var b strings.Builder
 
-	b.WriteString(styleSectionHeader.Render("SUBMIT A TASK") + "\n\n")
+	// logo above the input
+	lw := lipgloss.Width(logoLines[0])
+	logoPad := strings.Repeat(" ", max((w-lw)/2, 0))
+	const tagline = "...napping in progress"
+	tagPad := strings.Repeat(" ", max((w-lipgloss.Width(tagline))/2, 0))
+	b.WriteString("\n")
+	for _, line := range logoLines {
+		b.WriteString(logoPad + styleLogoMini.Render(line) + "\n")
+	}
+	b.WriteString(tagPad + styleLogoTagline.Render(tagline) + "\n\n")
 
 	// input box
 	inputBox := m.input.View()
@@ -417,7 +435,7 @@ func (m tuiModel) viewTasks() string {
 	b.WriteString(hint + "\n")
 
 	if len(m.tasks) == 0 {
-		b.WriteString("\n" + styleFaint.Render("  no tasks yet — mango is napping... 😴") + "\n")
+		b.WriteString("\n" + styleFaint.Render("napping in progress...") + "\n")
 		return b.String()
 	}
 

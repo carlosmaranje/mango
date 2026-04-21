@@ -118,6 +118,14 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colorBorder)
 
+	styleLogoMini = lipgloss.NewStyle().
+			Foreground(colorOrange).
+			Bold(true)
+
+	styleLogoTagline = lipgloss.NewStyle().
+				Foreground(colorAmber).
+				Italic(true)
+
 	styleTaskDone = lipgloss.NewStyle().
 			Foreground(colorSuccess)
 
