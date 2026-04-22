@@ -22,6 +22,16 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Check for Administrator privileges
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Host ""
+    Write-Error "Administrative privileges are required to register a Windows Scheduled Task."
+    Write-Host "Please restart PowerShell as Administrator and run the script again." -ForegroundColor Yellow
+    Write-Host ""
+    return
+}
+
 $AppName   = "mango"
 $TaskName  = "Mango Agent Gateway"
 $BinDir    = Join-Path $env:LOCALAPPDATA $AppName
@@ -98,6 +108,7 @@ if (-not (Test-Path "cmd\app") -or -not (Test-Path "go.mod")) {
 # Build binary
 Write-Host ""
 Write-Host "Building mango.exe..." -ForegroundColor Cyan
+$env:CGO_ENABLED = "1"
 go build -o mango.exe .\cmd\app
 if (-not (Test-Path "mango.exe")) {
     Write-Error "Build failed: mango.exe not found."
@@ -152,32 +163,37 @@ if (Test-Path $agentsSrcDir) {
     }
 }
 
-# Register Scheduled Task (runs as SYSTEM at boot, restarts on failure)
+# Register Scheduled Task (runs as current user at logon, restarts on failure)
 Write-Host ""
 Write-Host "Registering Scheduled Task '$TaskName'..."
 
 $action   = New-ScheduledTaskAction -Execute $BinPath -Argument "serve --config `"$CfgPath`""
-$trigger  = New-ScheduledTaskTrigger -AtStartup
+$trigger  = New-ScheduledTaskTrigger -AtLogon
 $settings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit    ([TimeSpan]::Zero) `
     -RestartCount          3 `
     -RestartInterval       (New-TimeSpan -Minutes 1) `
-    -StartWhenAvailable    $true `
+    -StartWhenAvailable `
     -MultipleInstances     IgnoreNew
 $principal = New-ScheduledTaskPrincipal `
-    -UserId    "SYSTEM" `
-    -LogonType ServiceAccount `
-    -RunLevel  Highest
+    -UserId    $env:USERNAME `
+    -LogonType Interactive
 
-Register-ScheduledTask `
-    -TaskName  $TaskName `
-    -Action    $action `
-    -Trigger   $trigger `
-    -Settings  $settings `
-    -Principal $principal `
-    -Force | Out-Null
+try {
+    Register-ScheduledTask `
+        -TaskName  $TaskName `
+        -Action    $action `
+        -Trigger   $trigger `
+        -Settings  $settings `
+        -Principal $principal `
+        -Force | Out-Null
+} catch {
+    Write-Error "Failed to register Scheduled Task: $_"
+    Write-Host "  Ensure you are running PowerShell as Administrator." -ForegroundColor Yellow
+    return
+}
 
-Write-Host "  Scheduled Task registered (starts at next boot, or start manually below)"
+Write-Host "  Scheduled Task registered (starts at next logon, or start manually below)"
 
 # Optional interactive Discord setup
 Write-Host ""
@@ -212,8 +228,14 @@ if ($configureDiscord -match '^[Yy]$') {
         $discordBlock += "`n"
         if ($channelsBlock) { $discordBlock += "$channelsBlock`n" }
 
-        $existing = if (Test-Path $CfgPath) { Get-Content $CfgPath -Raw } else { "" }
-        Set-Content -Path $CfgPath -Value ($discordBlock + $existing)
+        # Update or add discord block in config
+        $configContent = if (Test-Path $CfgPath) { Get-Content $CfgPath -Raw } else { "" }
+        if ($configContent -match "(?ms)^discord:.*?(?=\n\w+:|\Z)") {
+            $configContent = $configContent -replace "(?ms)^discord:.*?(?=\n\w+:|\Z)", $discordBlock.TrimEnd()
+        } else {
+            $configContent = $discordBlock + $configContent
+        }
+        Set-Content -Path $CfgPath -Value $configContent
         $discordConfigured = $true
         Write-Host "  Discord configured"
     } else {
@@ -275,7 +297,7 @@ if (-not $llmConfigured -or -not $discordConfigured) {
         Write-Host "bindings) to $CfgPath"
         Write-Host ""
     }
-    Write-Host "After editing the config, restart the gateway:"
+    Write-Host "After editing the config, restart the gateway (Requires Admin):"
     Write-Host "  notepad $CfgPath"
     Write-Host "  Stop-ScheduledTask  -TaskName '$TaskName'"
     Write-Host "  Start-ScheduledTask -TaskName '$TaskName'"
@@ -283,10 +305,10 @@ if (-not $llmConfigured -or -not $discordConfigured) {
 }
 
 Write-Host "=== Next steps ===" -ForegroundColor Cyan
-Write-Host "  Start now:    Start-ScheduledTask -TaskName '$TaskName'"
-Write-Host "  Stop:         Stop-ScheduledTask  -TaskName '$TaskName'"
+Write-Host "  Start now:    Start-ScheduledTask -TaskName '$TaskName' (Requires Admin)"
+Write-Host "  Stop:         Stop-ScheduledTask  -TaskName '$TaskName' (Requires Admin)"
 Write-Host "  Check status: mango status"
 Write-Host "  List agents:  mango agent list"
 Write-Host "  Submit task:  mango task submit 'Say hello' --wait"
 Write-Host ""
-Write-Host "The gateway will start automatically at next boot."
+Write-Host "The gateway will start automatically at next boot/logon."

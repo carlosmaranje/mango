@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 type Store interface {
@@ -29,7 +29,7 @@ func Open(dir string) (Store, error) {
 		return nil, fmt.Errorf("create memory dir: %w", err)
 	}
 	path := filepath.Join(dir, "memory.db")
-	db, err := sql.Open("sqlite3", path)
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}

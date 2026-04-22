@@ -23,7 +23,18 @@ func ResolveAgentsDir(explicit string) string {
 	if env := os.Getenv("MANGO_AGENTS_DIR"); env != "" {
 		return env
 	}
-	return DefaultAgentsDir
+	return defaultAgentsDir()
+}
+
+func defaultAgentsDir() string {
+	if os.Getenv("MANGO_AGENTS_DIR") != "" {
+		return os.Getenv("MANGO_AGENTS_DIR")
+	}
+	// Try to find it relative to config dir on Windows
+	if os.Getenv("APPDATA") != "" {
+		return filepath.Join(os.Getenv("APPDATA"), "mango", "agents")
+	}
+	return "/etc/mango/agents"
 }
 
 // AgentDefinitionPath returns the canonical path to an agent's .md file

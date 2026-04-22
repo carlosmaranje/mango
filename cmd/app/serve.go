@@ -145,9 +145,11 @@ func runServe(parent context.Context, cfg *Config) error {
 			}
 		}()
 
-		if err := bot.Start(ctx); err != nil {
-			return err
-		}
+		go func() {
+			if err := bot.Start(ctx); err != nil {
+				log.Printf("discord: %v", err)
+			}
+		}()
 	} else {
 		log.Printf("discord: no token configured, skipping")
 	}
