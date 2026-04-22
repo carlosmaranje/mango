@@ -34,7 +34,18 @@ func ResolveSkillsDir(explicit string) string {
 	if env := os.Getenv("MANGO_SKILLS_DIR"); env != "" {
 		return env
 	}
-	return DefaultSkillsDir
+	return defaultSkillsDir()
+}
+
+func defaultSkillsDir() string {
+	if os.Getenv("MANGO_SKILLS_DIR") != "" {
+		return os.Getenv("MANGO_SKILLS_DIR")
+	}
+	// Try to find it relative to config dir on Windows
+	if os.Getenv("APPDATA") != "" {
+		return filepath.Join(os.Getenv("APPDATA"), "mango", "skills")
+	}
+	return "/etc/mango/skills"
 }
 
 func (l *Loader) Load(name string) (*Skill, error) {

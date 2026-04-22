@@ -31,7 +31,7 @@ func NewBot(token string, router *Router, history *ChannelHistory, dispatcher *o
 	if err != nil {
 		return nil, fmt.Errorf("discord session: %w", err)
 	}
-	sess.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsDirectMessages | discordgo.IntentsMessageContent | discordgo.IntentsGuildPresences
+	sess.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsDirectMessages | discordgo.IntentsMessageContent
 
 	b := &Bot{
 		session:    sess,

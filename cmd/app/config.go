@@ -51,7 +51,17 @@ func defaultSocketPath() string {
 	if envPath := os.Getenv("MANGO_SOCKET_PATH"); envPath != "" {
 		return envPath
 	}
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "windows":
+		cacheDir, err := os.UserCacheDir()
+		if err == nil {
+			return filepath.Join(cacheDir, constants.AppName, constants.AppName+".sock")
+		}
+		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+			return filepath.Join(localAppData, constants.AppName, constants.AppName+".sock")
+		}
+		return filepath.Join(os.TempDir(), constants.AppName, constants.AppName+".sock")
+	case "darwin":
 		home, err := os.UserHomeDir()
 		if err == nil {
 			return filepath.Join(home, "."+constants.AppName, constants.AppName+".sock")
@@ -63,6 +73,12 @@ func defaultSocketPath() string {
 func defaultConfigPath() string {
 	if envPath := os.Getenv("MANGO_CONFIG"); envPath != "" {
 		return envPath
+	}
+	if runtime.GOOS == "windows" {
+		cfgDir, err := os.UserConfigDir()
+		if err == nil {
+			return filepath.Join(cfgDir, constants.AppName, "config.yaml")
+		}
 	}
 	return fmt.Sprintf("/etc/%s/config.yaml", constants.AppName)
 }
@@ -87,7 +103,13 @@ func loadRawViper(path string) (*viper.Viper, error) {
 	} else {
 		v.SetConfigName("config")
 		v.SetConfigType("yaml")
-		v.AddConfigPath(fmt.Sprintf("/etc/%s", constants.AppName))
+		if runtime.GOOS == "windows" {
+			if cfgDir, err := os.UserConfigDir(); err == nil {
+				v.AddConfigPath(filepath.Join(cfgDir, constants.AppName))
+			}
+		} else {
+			v.AddConfigPath(fmt.Sprintf("/etc/%s", constants.AppName))
+		}
 		v.AddConfigPath("./config")
 		v.AddConfigPath(".")
 		if err := v.ReadInConfig(); err != nil {

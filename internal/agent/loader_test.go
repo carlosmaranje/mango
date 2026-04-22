@@ -99,7 +99,11 @@ func TestResolveAgentsDir(t *testing.T) {
 		t.Errorf("env fallback: got %q", got)
 	}
 	t.Setenv("MANGO_AGENTS_DIR", "")
-	if got := ResolveAgentsDir(""); got != DefaultAgentsDir {
-		t.Errorf("default fallback: got %q", got)
+	expected := DefaultAgentsDir
+	if os.Getenv("APPDATA") != "" {
+		expected = filepath.Join(os.Getenv("APPDATA"), "mango", "agents")
+	}
+	if got := ResolveAgentsDir(""); got != expected {
+		t.Errorf("default fallback: got %q, want %q", got, expected)
 	}
 }

@@ -71,9 +71,31 @@ launchctl load    ~/Library/LaunchAgents/com.mango.gateway.plist
 
 **To uninstall:** `./install-mac.sh uninstall`
 
+#### Windows (requires Go, PowerShell 5.1+, Windows 10 1803+ or Windows Server 2019+)
+```powershell
+.\install.ps1
+```
+The script builds `mango.exe`, installs it to `%LocalAppData%\mango\`, copies the default config to `%AppData%\mango\config.yaml`, and registers a Windows Scheduled Task that starts the gateway at boot (running as SYSTEM).
+
+To manage the gateway after install:
+```powershell
+# Start immediately (without rebooting)
+Start-ScheduledTask -TaskName "Mango Agent Gateway"
+
+# Stop
+Stop-ScheduledTask -TaskName "Mango Agent Gateway"
+```
+
+**To uninstall:** `.\uninstall.ps1`
+
 ### Configuration
 
-By default, Mango looks for configuration in `/etc/mango/config.yaml`, then `./config/config.yaml`, and finally `./config.yaml`.
+By default, Mango looks for configuration in the following locations (in order):
+
+- **Linux**: `/etc/mango/config.yaml`, then `./config/config.yaml`, then `./config.yaml`
+- **macOS**: `./config/config.yaml`, then `./config.yaml`
+- **Windows**: `%AppData%\mango\config.yaml`, then `./config/config.yaml`, then `./config.yaml`
+
 You can override the default path by setting the `MANGO_CONFIG` environment variable.
 
 You can use the CLI to initialize and manage your configuration:
@@ -214,6 +236,7 @@ Production-ready service files are provided in the `deploy/` directory:
 
 -   **Linux (systemd)**: `deploy/mango.service`
 -   **macOS (launchd)**: `deploy/mango.plist`
+-   **Windows**: `install.ps1` registers a Scheduled Task (runs as SYSTEM at boot)
 
 ## 📄 License
 

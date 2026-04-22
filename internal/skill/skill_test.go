@@ -54,7 +54,11 @@ func TestResolveSkillsDir_UsesEnv(t *testing.T) {
 
 func TestResolveSkillsDir_Default(t *testing.T) {
 	t.Setenv("MANGO_SKILLS_DIR", "")
-	if got := ResolveSkillsDir(""); got != DefaultSkillsDir {
-		t.Errorf("got %q, want %q", got, DefaultSkillsDir)
+	expected := DefaultSkillsDir
+	if os.Getenv("APPDATA") != "" {
+		expected = filepath.Join(os.Getenv("APPDATA"), "mango", "skills")
+	}
+	if got := ResolveSkillsDir(""); got != expected {
+		t.Errorf("got %q, want %q", got, expected)
 	}
 }
