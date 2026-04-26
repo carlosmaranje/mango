@@ -71,47 +71,25 @@ func TestRunner_InvokeLLM_UsesSystemPromptAndGoal(t *testing.T) {
 	}
 }
 
-func TestRunner_InvokeLLM_HistoryPreferredOverSession(t *testing.T) {
+func TestRunner_InvokeLLM_InjectsHistory(t *testing.T) {
 	llmc := &captureLLM{response: "ok"}
-	sess := NewSessionStore()
-	sess.Append(llm.Message{Role: "user", Content: "from session"})
+	r := NewRunner(&Agent{Name: "x", LLM: llmc, SystemPrompt: "sp"}, nil, time.Second)
 
-	r := NewRunner(&Agent{Name: "x", LLM: llmc, SystemPrompt: "sp", Session: sess}, nil, time.Second)
-
-	history := []llm.Message{{Role: "user", Content: "from history"}}
+	history := []llm.Message{
+		{Role: "user", Content: "prior"},
+		{Role: "assistant", Content: "yes"},
+	}
 	if _, err := r.invokeLLM(context.Background(), "goal", history, false); err != nil {
 		t.Fatal(err)
 	}
 
 	msgs := llmc.lastMessages()
-	if len(msgs) != 3 {
-		t.Fatalf("expected 3 messages (system+history+goal), got %d: %+v", len(msgs), msgs)
+	// system + prior + yes + goal
+	if len(msgs) != 4 {
+		t.Fatalf("expected 4 messages, got %d: %+v", len(msgs), msgs)
 	}
-	if msgs[1].Content != "from history" {
-		t.Errorf("expected history msg, got %q", msgs[1].Content)
-	}
-	if len(sess.Snapshot()) != 1 {
-		t.Error("Session was written despite explicit history — should skip Session writes")
-	}
-}
-
-func TestRunner_InvokeLLM_FallsBackToSession(t *testing.T) {
-	llmc := &captureLLM{response: "reply"}
-	sess := NewSessionStore()
-	sess.Append(llm.Message{Role: "user", Content: "prior"})
-
-	r := NewRunner(&Agent{Name: "x", LLM: llmc, SystemPrompt: "sp", Session: sess}, nil, time.Second)
-
-	if _, err := r.invokeLLM(context.Background(), "next", nil, false); err != nil {
-		t.Fatal(err)
-	}
-
-	snap := sess.Snapshot()
-	if len(snap) != 3 {
-		t.Fatalf("expected 3 session msgs (prior+next+reply), got %d", len(snap))
-	}
-	if snap[1].Content != "next" || snap[2].Content != "reply" {
-		t.Errorf("session update wrong: %+v", snap)
+	if msgs[1].Content != "prior" || msgs[2].Content != "yes" {
+		t.Errorf("history not injected correctly: %+v", msgs[1:3])
 	}
 }
 

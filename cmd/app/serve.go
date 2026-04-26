@@ -29,12 +29,12 @@ func newServeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runServe(cmd.Context(), cfg)
+			return runServe(cmd.Context(), cfg, configPath)
 		},
 	}
 }
 
-func runServe(parent context.Context, cfg *Config) error {
+func runServe(parent context.Context, cfg *Config, cfgPath string) error {
 	ctx, cancel := signal.NotifyContext(parent, shutdownSignals...)
 	defer cancel()
 
@@ -102,14 +102,17 @@ func runServe(parent context.Context, cfg *Config) error {
 			Skills:       ac.Skills,
 			SystemPrompt: systemPrompt,
 			Memory:       mem,
-			Session:      agent.NewSessionStore(),
 			AuthCreds:    ac.AuthCreds,
 			MaxTokens:    ac.MaxTokens,
 		}
 		if err := registry.Register(a); err != nil {
 			return err
 		}
-		runner := agent.NewRunner(a, toolReg, 0)
+		agentToolReg := toolReg.Clone()
+		if err := agentToolReg.Register(tools.NewIdentityTool(ac.Name, cfg.SocketPath, cfgPath)); err != nil {
+			return fmt.Errorf("agent %q: register identity tool: %w", ac.Name, err)
+		}
+		runner := agent.NewRunner(a, agentToolReg, 0)
 		runners[a.Name] = runner
 		if err := runner.Start(ctx); err != nil {
 			return err
@@ -142,8 +145,7 @@ func runServe(parent context.Context, cfg *Config) error {
 			bindings = append(bindings, discord.ChannelBinding{ChannelID: b.ChannelID, AgentName: b.Agent})
 		}
 		router := discord.NewRouter(bindings)
-		history := discord.NewChannelHistory(discord.DefaultHistorySize)
-		bot, err := discord.NewBot(cfg.Discord.Token, router, history, dispatcher, cfg.Discord.Global)
+		bot, err := discord.NewBot(cfg.Discord.Token, router, dispatcher, cfg.Discord.Global)
 		if err != nil {
 			return err
 		}

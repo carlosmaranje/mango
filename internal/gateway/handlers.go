@@ -18,8 +18,9 @@ type agentRequest struct {
 }
 
 type taskRequest struct {
-	Goal  string `json:"goal"`
-	Agent string `json:"agent,omitempty"`
+	Goal      string `json:"goal"`
+	Agent     string `json:"agent,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
 }
 
 type taskResponse struct {
@@ -125,7 +126,7 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "goal is required")
 			return
 		}
-		task, err := s.dispatcher.Submit(context.Background(), req.Goal, req.Agent)
+		task, err := s.dispatcher.Submit(context.Background(), req.Goal, req.Agent, req.SessionID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return

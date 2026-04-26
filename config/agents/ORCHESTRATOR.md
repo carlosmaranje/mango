@@ -50,6 +50,7 @@ When given a goal, analyze it to determine:
 
 ## Strategy
 
+- Conversational messages, greetings, short acknowledgments, and casual small-talk must be answered directly using action=finish — never dispatch these to a worker.
 - For simple, single-step goals: create one task for the most appropriate agent
 - For complex goals: decompose into parallel sub-tasks
 - When presenting agent results: keep all meaningful detail. You can shape the tone and add personality, but stripping a rich answer down to a single sentence is not synthesis — it is information loss. When combining multiple agents, weave their results together coherently.

@@ -34,7 +34,7 @@ func loadAgents(c *gatewayClient, ctx context.Context) tea.Cmd {
 
 func submitTask(c *gatewayClient, ctx context.Context, goal, agentName string, _ int) tea.Cmd {
 	return func() tea.Msg {
-		body := map[string]string{"goal": goal}
+		body := map[string]string{"goal": goal, "session_id": "tui"}
 		if agentName != "" {
 			body["agent"] = agentName
 		}
@@ -58,7 +58,7 @@ func pollTask2(c *gatewayClient, ctx context.Context, id string, _ int) tea.Cmd 
 
 func submitChatMsg(c *gatewayClient, ctx context.Context, text, agentName string) tea.Cmd {
 	return func() tea.Msg {
-		body := map[string]string{"goal": text}
+		body := map[string]string{"goal": text, "session_id": "tui"}
 		if agentName != "" {
 			body["agent"] = agentName
 		}
