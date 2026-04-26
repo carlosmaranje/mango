@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/spf13/viper"
 
@@ -46,7 +47,12 @@ type Config struct {
 }
 
 func defaultSocketPath() string {
-	return filepath.Join(constants.MangoDir(), constants.AppName+".sock")
+	switch runtime.GOOS {
+	case "windows", "darwin":
+		return filepath.Join(constants.MangoDir(), constants.AppName+".sock")
+	default:
+		return fmt.Sprintf("/var/run/%s/%s.sock", constants.AppName, constants.AppName)
+	}
 }
 
 func defaultConfigPath() string {

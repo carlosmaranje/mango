@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"os/signal"
 	"path/filepath"
-	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -35,11 +35,20 @@ func newServeCmd() *cobra.Command {
 }
 
 func runServe(parent context.Context, cfg *Config) error {
-	ctx, cancel := signal.NotifyContext(parent, syscall.SIGINT, syscall.SIGTERM)
+	ctx, cancel := signal.NotifyContext(parent, shutdownSignals...)
 	defer cancel()
 
 	agentsDir := agent.ResolveAgentsDir()
-	skillLoader := skill.NewLoader("")
+	skillsDir := skill.ResolveSkillsDir()
+	socketDir := filepath.Dir(cfg.SocketPath)
+
+	for _, dir := range []string{agentsDir, skillsDir, socketDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("create dir %s: %w", dir, err)
+		}
+	}
+
+	skillLoader := skill.NewLoader(skillsDir)
 
 	registry := agent.NewRegistry()
 	runners := map[string]*agent.Runner{}
