@@ -283,9 +283,8 @@ func appendAgentToConfig(name string, skills []string, provider, model, apiKey, 
 	}
 
 	entry := AgentConfig{
-		Name:    name,
-		WorkDir: fmt.Sprintf("/var/lib/mango/agents/%s", name),
-		Skills:  skills,
+		Name:   name,
+		Skills: skills,
 		LLM: LLMConfig{
 			Provider: provider,
 			Model:    model,

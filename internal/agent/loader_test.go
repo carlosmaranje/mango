@@ -91,15 +91,17 @@ func TestComposeSystemPrompt_MissingSkillBubblesError(t *testing.T) {
 }
 
 func TestResolveAgentsDir(t *testing.T) {
-	t.Setenv("MANGO_AGENTS_DIR", "/env/agents")
 	if got := ResolveAgentsDir("/explicit"); got != "/explicit" {
 		t.Errorf("explicit precedence: got %q", got)
 	}
-	if got := ResolveAgentsDir(""); got != "/env/agents" {
-		t.Errorf("env fallback: got %q", got)
+	t.Setenv("MANGO_DIR", "/custom/mango")
+	if got := ResolveAgentsDir(""); got != "/custom/mango/agents" {
+		t.Errorf("MANGO_DIR fallback: got %q, want /custom/mango/agents", got)
 	}
-	t.Setenv("MANGO_AGENTS_DIR", "")
-	if got := ResolveAgentsDir(""); got != DefaultAgentsDir {
-		t.Errorf("default fallback: got %q", got)
+	t.Setenv("MANGO_DIR", "")
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".mango", "agents")
+	if got := ResolveAgentsDir(""); got != want {
+		t.Errorf("default fallback: got %q, want %q", got, want)
 	}
 }

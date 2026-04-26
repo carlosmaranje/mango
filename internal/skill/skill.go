@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-)
 
-const DefaultSkillsDir = "/etc/mango/skills"
+	"github.com/carlosmaranje/mango/internal/constants"
+)
 
 type Skill struct {
 	Name    string
@@ -25,16 +25,13 @@ func NewLoader(dir string) *Loader {
 	return &Loader{Dir: dir}
 }
 
-// ResolveSkillsDir returns the explicit path when non-empty, otherwise the
-// value of MANGO_SKILLS_DIR, otherwise DefaultSkillsDir.
+// ResolveSkillsDir returns the explicit path when non-empty, otherwise
+// MANGO_DIR/skills (see constants.MangoDir).
 func ResolveSkillsDir(explicit string) string {
 	if explicit != "" {
 		return explicit
 	}
-	if env := os.Getenv("MANGO_SKILLS_DIR"); env != "" {
-		return env
-	}
-	return DefaultSkillsDir
+	return filepath.Join(constants.MangoDir(), "skills")
 }
 
 func (l *Loader) Load(name string) (*Skill, error) {

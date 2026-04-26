@@ -83,7 +83,6 @@ func newConfigAgentCmd() *cobra.Command {
 }
 
 type agentFlags struct {
-	workDir   string
 	role      string
 	skills    string
 	provider  string
@@ -144,10 +143,9 @@ func newConfigAgentAddCmd() *cobra.Command {
 			}
 
 			newAgent := AgentConfig{
-				Name:    name,
-				WorkDir: f.workDir,
-				Role:    f.role,
-				Skills:  parseSkills(f.skills),
+				Name:   name,
+				Role:   f.role,
+				Skills: parseSkills(f.skills),
 				LLM: LLMConfig{
 					Provider: f.provider,
 					Model:    f.model,
@@ -193,9 +191,6 @@ func newConfigAgentEditCmd() *cobra.Command {
 			for i := range agents {
 				if agents[i].Name == name {
 					found = true
-					if cmd.Flags().Changed("work-dir") {
-						agents[i].WorkDir = f.workDir
-					}
 					if cmd.Flags().Changed("role") {
 						agents[i].Role = f.role
 					}
@@ -235,7 +230,6 @@ func newConfigAgentEditCmd() *cobra.Command {
 }
 
 func addAgentFlags(cmd *cobra.Command, f *agentFlags) {
-	cmd.Flags().StringVar(&f.workDir, "work-dir", "", "agent working directory")
 	cmd.Flags().StringVar(&f.role, "role", "", "agent role")
 	cmd.Flags().StringVar(&f.skills, "skills", "", "comma-separated list of skills")
 	cmd.Flags().StringVar(&f.provider, "provider", "", "LLM provider")

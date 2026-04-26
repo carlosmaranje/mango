@@ -39,22 +39,23 @@ func TestLoader_MissingSkillReturnsDescriptiveError(t *testing.T) {
 }
 
 func TestResolveSkillsDir_PrefersExplicit(t *testing.T) {
-	t.Setenv("MANGO_SKILLS_DIR", "/env/path")
 	if got := ResolveSkillsDir("/explicit"); got != "/explicit" {
 		t.Errorf("got %q, want /explicit", got)
 	}
 }
 
-func TestResolveSkillsDir_UsesEnv(t *testing.T) {
-	t.Setenv("MANGO_SKILLS_DIR", "/env/path")
-	if got := ResolveSkillsDir(""); got != "/env/path" {
-		t.Errorf("got %q, want /env/path", got)
+func TestResolveSkillsDir_UsesMangoDir(t *testing.T) {
+	t.Setenv("MANGO_DIR", "/custom/mango")
+	if got := ResolveSkillsDir(""); got != "/custom/mango/skills" {
+		t.Errorf("got %q, want /custom/mango/skills", got)
 	}
 }
 
 func TestResolveSkillsDir_Default(t *testing.T) {
-	t.Setenv("MANGO_SKILLS_DIR", "")
-	if got := ResolveSkillsDir(""); got != DefaultSkillsDir {
-		t.Errorf("got %q, want %q", got, DefaultSkillsDir)
+	t.Setenv("MANGO_DIR", "")
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".mango", "skills")
+	if got := ResolveSkillsDir(""); got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

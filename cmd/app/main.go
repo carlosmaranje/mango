@@ -31,7 +31,7 @@ func main() {
 			return runTUI(cfg)
 		},
 	}
-	root.PersistentFlags().StringVar(&configPath, "config", "", fmt.Sprintf("path to config.yaml (default: /etc/%s/config.yaml or ./config.yaml, can be overridden by MANGO_CONFIG)", constants.AppName))
+	root.PersistentFlags().StringVar(&configPath, "config", "", fmt.Sprintf("path to config.yaml (default: MANGO_DIR/config.yaml, where MANGO_DIR defaults to ~/.%s)", constants.AppName))
 
 	root.AddCommand(
 		newServeCmd(),

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
@@ -71,10 +70,7 @@ func runServe(parent context.Context, cfg *Config) error {
 			return fmt.Errorf("agent %q: %w", ac.Name, err)
 		}
 
-		workDir := ac.WorkDir
-		if workDir == "" {
-			workDir = filepath.Join(os.TempDir(), constants.AppName, ac.Name)
-		}
+		workDir := filepath.Join(constants.MangoDir(), "agents", ac.Name)
 		mem, err := memory.Open(workDir)
 		if err != nil {
 			return fmt.Errorf("agent %q memory: %w", ac.Name, err)
@@ -122,6 +118,7 @@ func runServe(parent context.Context, cfg *Config) error {
 	}
 	dispatcher := orchestrator.NewDispatcher(registry, runners, orch)
 
+	// This is where the gateway starts
 	gw := gateway.NewServer(cfg.SocketPath, registry, runners, dispatcher)
 	if err := gw.Start(ctx); err != nil {
 		return err

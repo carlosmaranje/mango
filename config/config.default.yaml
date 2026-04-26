@@ -4,13 +4,11 @@
 # interactively during `install.sh`, via `mango config agent edit`, or
 # by editing this file directly.
 #
-# Agent definition files live under MANGO_AGENTS_DIR (default:
-# /etc/mango/agents/). Run `mango agent create <name>` to scaffold one.
-# Skill files live under MANGO_SKILLS_DIR (default: /etc/mango/skills/).
+# All runtime files live under MANGO_DIR (default: ~/.mango).
+# Agent definitions: MANGO_DIR/agents/   Skill definitions: MANGO_DIR/skills/
 
 agents:
   - name: orchestrator
-    work_dir: /var/lib/mango/agents/orchestrator
     role: orchestrator
     llm:
       provider: ""
@@ -18,7 +16,6 @@ agents:
       api_key: ""
 
   - name: worker
-    work_dir: /var/lib/mango/agents/worker
     skills: []
     llm:
       provider: ""
