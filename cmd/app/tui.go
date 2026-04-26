@@ -16,12 +16,27 @@ import (
 type section int
 
 const (
-	sectionTasks section = iota
+	sectionChat section = iota
+	sectionTasks
 	sectionAgents
 	sectionConfig
 )
 
-var sectionNames = []string{"Tasks", "Agents", "Config"}
+var sectionNames = []string{"Chat", "Tasks", "Agents", "Config"}
+
+type NavSection struct {
+	Index section
+	Name  string
+	Icon  string
+	View  string
+}
+
+var navSections = []NavSection{
+	{Name: "Chat", Icon: "❯_", Index: sectionChat},
+	{Name: "Tasks", Icon: "⫘", Index: sectionTasks},
+	{Name: "Agents", Icon: "⎔", Index: sectionAgents},
+	{Name: "Config", Icon: "⌥", Index: sectionConfig},
+}
 
 // ── messages ──────────────────────────────────────────────────────────────────
 
@@ -51,7 +66,7 @@ type tuiModel struct {
 	ctx         context.Context
 	width       int
 	height      int
-	section     section
+	section     NavSection
 	agents      []agentStatusDTO
 	tasks       []trackedTask
 	gatewayOK   bool

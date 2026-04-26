@@ -41,7 +41,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "shift+tab":
 			m = m.cycleSection(-1)
 		case "ctrl+a":
-			if m.section == sectionTasks {
+			if m.section.Index == sectionTasks {
 				m = m.toggleAgentInput()
 			}
 		case "esc":
@@ -49,16 +49,16 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m = m.closeAgentInput()
 			}
 		case "enter":
-			if m.section == sectionTasks {
+			if m.section.Index == sectionTasks {
 				var enterCmds []tea.Cmd
 				m, enterCmds = m.handleTasksEnter()
 				cmds = append(cmds, enterCmds...)
 			}
-			if m.section == sectionAgents {
+			if m.section.Index == sectionAgents {
 				cmds = append(cmds, loadAgents(m.client, m.ctx))
 			}
 		case "r":
-			if m.section == sectionAgents {
+			if m.section.Index == sectionAgents {
 				cmds = append(cmds, loadAgents(m.client, m.ctx))
 			}
 		}
@@ -119,9 +119,10 @@ func (m tuiModel) handleResultKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // cycleSection advances the active section by dir (+1 or -1) and updates focus.
-func (m tuiModel) cycleSection(dir int) tuiModel {
-	m.section = section((int(m.section) + dir + len(sectionNames)) % len(sectionNames))
-	if m.section == sectionTasks {
+func (m tuiModel) cycleSection(direction int) tuiModel {
+	nextSectionIndex := (int(m.section.Index) + direction + len(sectionNames)) % len(sectionNames)
+	m.section = navSections[nextSectionIndex]
+	if m.section.Index == sectionTasks {
 		m.input.Focus()
 	} else {
 		m.input.Blur()
@@ -211,7 +212,7 @@ func (m tuiModel) handleTaskUpdated(dto taskDTO) (tuiModel, []tea.Cmd) {
 
 // routeInputUpdate forwards msg to the active text input when in the Tasks section.
 func (m tuiModel) routeInputUpdate(msg tea.Msg) (tuiModel, tea.Cmd) {
-	if m.section != sectionTasks {
+	if m.section.Index != sectionTasks {
 		return m, nil
 	}
 	var cmd tea.Cmd

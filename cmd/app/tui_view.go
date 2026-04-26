@@ -9,8 +9,6 @@ import (
 
 const navWidth = 18
 
-var navIcons = []string{"✦", "⬡", "⚙"}
-
 var logoLines = [6]string{
 	`███╗   ███╗ █████╗ ███╗   ██╗ ██████╗  ██████╗`,
 	`████╗ ████║██╔══██╗████╗  ██║██╔════╝ ██╔═══██╗`,
@@ -75,9 +73,9 @@ func (m tuiModel) viewHeader() string {
 func (m tuiModel) viewNav() string {
 	var b strings.Builder
 	b.WriteString(styleSectionHeader.PaddingLeft(2).Render("NAVIGATE") + "\n\n")
-	for i, name := range sectionNames {
-		label := navIcons[i] + " " + name
-		if section(i) == m.section {
+	for _, navSection := range navSections {
+		label := navSection.Icon + " " + navSection.Name
+		if navSection.Index == m.section.Index {
 			b.WriteString(styleNavItemActive.Width(navWidth-2).Render(label) + "\n")
 		} else {
 			b.WriteString(styleNavItem.Width(navWidth-2).Render(label) + "\n")
@@ -89,8 +87,8 @@ func (m tuiModel) viewNav() string {
 // ── content router ────────────────────────────────────────────────────────────
 
 func (m tuiModel) viewContent() string {
-	switch m.section {
-	case sectionTasks:
+	switch m.section.Index {
+	case sectionTasks, sectionChat:
 		return m.viewTasks()
 	case sectionAgents:
 		return m.viewAgents()
@@ -108,12 +106,6 @@ func (m tuiModel) viewTasks() string {
 
 	b.WriteString(m.viewTasksLogo(w))
 	b.WriteString(m.viewTasksInput(w))
-
-	if len(m.tasks) == 0 {
-		b.WriteString("\n" + styleFaint.Render("napping in progress...") + "\n")
-		return b.String()
-	}
-
 	b.WriteString("\n" + styleSectionHeader.Render("RECENT TASKS") + "\n\n")
 	b.WriteString(m.viewTaskList(w))
 	return b.String()
