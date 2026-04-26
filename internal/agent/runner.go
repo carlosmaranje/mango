@@ -156,7 +156,7 @@ func (r *Runner) invokeLLM(ctx context.Context, goal string, history []llm.Messa
 		log.Printf("agent %q: step %d — sending %d messages to LLM (tools: %d)", r.Agent.Name, step, len(messages), len(toolDefs))
 		resp, err := r.Agent.LLM.Complete(ctx, llm.CompletionRequest{
 			Messages:  messages,
-			MaxTokens: 1024,
+			MaxTokens: r.Agent.EffectiveMaxTokens(),
 			JSON:      jsonResponse,
 			Tools:     toolDefs,
 		})

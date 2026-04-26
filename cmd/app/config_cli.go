@@ -90,6 +90,7 @@ type agentFlags struct {
 	apiKey    string
 	baseURL   string
 	authCreds string
+	maxTokens int
 }
 
 func parseSkills(s string) []string {
@@ -153,6 +154,7 @@ func newConfigAgentAddCmd() *cobra.Command {
 					BaseURL:  f.baseURL,
 				},
 				AuthCreds: parseAuthCreds(f.authCreds),
+				MaxTokens: f.maxTokens,
 			}
 			agents = append(agents, newAgent)
 			v.Set("agents", agents)
@@ -212,6 +214,9 @@ func newConfigAgentEditCmd() *cobra.Command {
 					if cmd.Flags().Changed("auth-creds") {
 						agents[i].AuthCreds = parseAuthCreds(f.authCreds)
 					}
+					if cmd.Flags().Changed("max-tokens") {
+						agents[i].MaxTokens = f.maxTokens
+					}
 					break
 				}
 			}
@@ -237,6 +242,7 @@ func addAgentFlags(cmd *cobra.Command, f *agentFlags) {
 	cmd.Flags().StringVar(&f.apiKey, "api-key", "", "API key")
 	cmd.Flags().StringVar(&f.baseURL, "base-url", "", "Base URL for the LLM provider")
 	cmd.Flags().StringVar(&f.authCreds, "auth-creds", "", "comma-separated list of key=value pairs for auth credentials")
+	cmd.Flags().IntVar(&f.maxTokens, "max-tokens", 0, "maximum tokens per LLM response (0 = use default)")
 }
 
 func newConfigAgentRemoveCmd() *cobra.Command {

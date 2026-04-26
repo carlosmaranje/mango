@@ -84,8 +84,7 @@ sudo systemctl daemon-reload
 # Resolve the mango data directory: honour MANGO_DIR if the caller set it,
 # otherwise derive ~/.mango from the mango system user's home.
 if [ -z "$MANGO_DIR" ]; then
-	MANGO_HOME=$(getent passwd mango | cut -d: -f6)
-	MANGO_DIR="$MANGO_HOME/.mango"
+	MANGO_DIR=$(getent passwd mango | cut -d: -f6)
 fi
 export MANGO_DIR
 
@@ -185,7 +184,8 @@ if [[ $REPLY =~ ^[Yy]$ ]] && [ -f "$MANGO_DIR/config.yaml" ]; then
 			fi
 		} > "$tmpfile"
 		sudo -u mango cat "$MANGO_DIR/config.yaml" >> "$tmpfile"
-		sudo -u mango mv "$tmpfile" "$MANGO_DIR/config.yaml"
+		sudo -u mango tee "$MANGO_DIR/config.yaml" < "$tmpfile" > /dev/null
+		rm -f "$tmpfile"
 		DISCORD_CONFIGURED=1
 		echo "  Discord configured"
 	else
@@ -206,6 +206,7 @@ configure_agent() {
 	read -p "  model: " model </dev/tty
 	read -p "  api_key (or \${ENV_VAR}, leave blank for ollama): " api_key </dev/tty
 	read -p "  base_url (leave blank for default): " base_url </dev/tty
+	read -p "  max_tokens (leave blank for default 4096): " max_tokens </dev/tty
 
 	local args=(config agent edit "$agent_name" --provider "$provider" --model "$model")
 	if [ -n "$api_key" ]; then
@@ -213,6 +214,9 @@ configure_agent() {
 	fi
 	if [ -n "$base_url" ]; then
 		args+=(--base-url "$base_url")
+	fi
+	if [ -n "$max_tokens" ]; then
+		args+=(--max-tokens "$max_tokens")
 	fi
 	sudo -u mango env MANGO_DIR="$MANGO_DIR" /usr/local/bin/mango "${args[@]}"
 	echo "  $agent_name configured"

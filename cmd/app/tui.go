@@ -43,6 +43,8 @@ var navSections = []NavSection{
 type agentsLoadedMsg []agentStatusDTO
 type taskSubmittedMsg taskDTO
 type taskUpdatedMsg taskDTO
+type chatSubmittedMsg taskDTO
+type chatUpdatedMsg taskDTO
 type healthMsg bool
 type errMsg struct{ err error }
 type tickMsg time.Time
@@ -59,28 +61,41 @@ type trackedTask struct {
 	pollingDone bool
 }
 
+// ── chat message ──────────────────────────────────────────────────────────────
+
+type chatMessage struct {
+	role      string // "user" or "agent"
+	content   string
+	agentName string
+}
+
 // ── model ─────────────────────────────────────────────────────────────────────
 
 type tuiModel struct {
-	client      *gatewayClient
-	ctx         context.Context
-	width       int
-	height      int
-	section     NavSection
-	agents      []agentStatusDTO
-	tasks       []trackedTask
-	gatewayOK   bool
-	gatewayMsg  string
-	loading     bool
-	spinner     spinner.Model
-	input       textinput.Model
-	agentInput  textinput.Model // "--agent" override
-	resultVP    viewport.Model
-	showResult  bool
-	resultText  string
-	showHelp    bool
-	showAgentIn bool
-	err         error
+	client       *gatewayClient
+	ctx          context.Context
+	width        int
+	height       int
+	section      NavSection
+	agents       []agentStatusDTO
+	tasks        []trackedTask
+	gatewayOK    bool
+	gatewayMsg   string
+	loading      bool
+	spinner      spinner.Model
+	input        textinput.Model
+	agentInput   textinput.Model // "--agent" override (shared by tasks + chat)
+	resultVP     viewport.Model
+	showResult   bool
+	resultText   string
+	showHelp     bool
+	showAgentIn  bool
+	err          error
+	chatMessages []chatMessage
+	chatInput    textinput.Model
+	chatVP       viewport.Model
+	chatLoading  bool
+	chatAgent    string
 }
 
 func newTUIModel(cfg *Config) tuiModel {
@@ -93,24 +108,35 @@ func newTUIModel(cfg *Config) tuiModel {
 	ti.PlaceholderStyle = styleFaint
 	ti.TextStyle = lipgloss.NewStyle().Foreground(colorCream)
 	ti.Cursor.Style = lipgloss.NewStyle().Foreground(colorOrange)
-	ti.Focus()
 	ti.CharLimit = 512
 
+	ci := textinput.New()
+	ci.Placeholder = "Message an agent... (press Enter)"
+	ci.PlaceholderStyle = styleFaint
+	ci.TextStyle = lipgloss.NewStyle().Foreground(colorCream)
+	ci.Cursor.Style = lipgloss.NewStyle().Foreground(colorOrange)
+	ci.CharLimit = 512
+	ci.Focus() // chat is the default section
+
 	ai := textinput.New()
-	ai.Placeholder = "agent name (optional)"
+	ai.Placeholder = "agent name (leave blank for orchestrator)"
 	ai.PlaceholderStyle = styleFaint
 	ai.TextStyle = lipgloss.NewStyle().Foreground(colorAmber)
 	ai.CharLimit = 64
 
 	vp := viewport.New(80, 20)
+	cvp := viewport.New(80, 20)
 
 	return tuiModel{
 		client:     newGatewayClient(cfg.SocketPath),
 		ctx:        context.Background(),
+		section:    navSections[0],
 		spinner:    sp,
 		input:      ti,
+		chatInput:  ci,
 		agentInput: ai,
 		resultVP:   vp,
+		chatVP:     cvp,
 		gatewayMsg: cfg.SocketPath,
 	}
 }

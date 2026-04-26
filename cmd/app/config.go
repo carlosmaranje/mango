@@ -25,6 +25,7 @@ type AgentConfig struct {
 	Skills    []string          `mapstructure:"skills" yaml:"skills,omitempty"`
 	LLM       LLMConfig         `mapstructure:"llm" yaml:"llm"`
 	AuthCreds map[string]string `mapstructure:"auth_creds" yaml:"auth_creds,omitempty"`
+	MaxTokens int               `mapstructure:"max_tokens" yaml:"max_tokens,omitempty"`
 }
 
 type BindingConfig struct {

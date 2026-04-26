@@ -88,14 +88,86 @@ func (m tuiModel) viewNav() string {
 
 func (m tuiModel) viewContent() string {
 	switch m.section.Index {
-	case sectionTasks, sectionChat:
+	case sectionTasks:
 		return m.viewTasks()
 	case sectionAgents:
 		return m.viewAgents()
+	case sectionChat:
+		return m.viewChat()
 	case sectionConfig:
 		return m.viewConfigSection()
 	}
 	return ""
+}
+
+// ── chat section ──────────────────────────────────────────────────────────────
+
+func (m tuiModel) viewChat() string {
+	w := m.contentWidth() - 2
+	var b strings.Builder
+
+	// agent selector
+	agentLabel := "orchestrator (auto)"
+	if m.chatAgent != "" {
+		agentLabel = m.chatAgent
+	}
+	b.WriteString("\n  " + styleFaint.Render("agent: ") + stylePill.Render(agentLabel) + "\n\n")
+
+	// agent input (when ctrl+a was pressed)
+	if m.showAgentIn {
+		agentBox := styleInput.Width(w - 4).Render(m.agentInput.View())
+		if m.agentInput.Focused() {
+			agentBox = styleInputFocused.Width(w - 4).Render(m.agentInput.View())
+		}
+		b.WriteString(agentBox + "\n")
+	}
+
+	// message history viewport
+	b.WriteString(m.chatVP.View() + "\n")
+
+	// thinking indicator (animated outside VP so spinner updates work)
+	if m.chatLoading {
+		b.WriteString(m.spinner.View() + " " + styleFaint.Render("thinking...") + "\n")
+	} else {
+		b.WriteString("\n")
+	}
+
+	// input
+	inputBox := styleInput.Width(w - 4).Render(m.chatInput.View())
+	if m.chatInput.Focused() {
+		inputBox = styleInputFocused.Width(w - 4).Render(m.chatInput.View())
+	}
+	b.WriteString(inputBox + "\n")
+
+	hint := styleFaint.Render("enter") + styleKeyDesc.Render(" send  ") +
+		styleFaint.Render("ctrl+a") + styleKeyDesc.Render(" set agent  ") +
+		styleFaint.Render("↑/↓") + styleKeyDesc.Render(" scroll  ") +
+		styleFaint.Render("shift + ?") + styleKeyDesc.Render(" help")
+	b.WriteString(hint + "\n")
+
+	return b.String()
+}
+
+func (m tuiModel) renderChatContent(w int) string {
+	if len(m.chatMessages) == 0 {
+		return "\n" +
+			styleFaint.Render("  No messages yet.") + "\n\n" +
+			styleFaint.Render("  Type a message below. Use ctrl+a to pick a specific agent,") + "\n" +
+			styleFaint.Render("  or leave it as auto to route through the orchestrator.")
+	}
+
+	var b strings.Builder
+	for _, msg := range m.chatMessages {
+		if msg.role == "user" {
+			b.WriteString("\n  " + styleChatUser.Render("you") + "\n")
+			b.WriteString(lipgloss.NewStyle().Foreground(colorCream).Width(w).Render("  "+msg.content) + "\n")
+		} else {
+			name := msg.agentName
+			b.WriteString("\n  " + styleChatAgent.Render(name) + "\n")
+			b.WriteString(lipgloss.NewStyle().Foreground(colorSoftWhite).Width(w).Render("  "+msg.content) + "\n")
+		}
+	}
+	return b.String()
 }
 
 // ── tasks section ─────────────────────────────────────────────────────────────
@@ -144,7 +216,7 @@ func (m tuiModel) viewTasksInput(w int) string {
 
 	hint := styleFaint.Render("enter") + styleKeyDesc.Render(" submit  ") +
 		styleFaint.Render("ctrl+a") + styleKeyDesc.Render(" set agent  ") +
-		styleFaint.Render("?") + styleKeyDesc.Render(" help")
+		styleFaint.Render("shift + ?") + styleKeyDesc.Render(" help")
 	b.WriteString(hint + "\n")
 	return b.String()
 }
@@ -158,6 +230,9 @@ func (m tuiModel) viewTaskList(w int) string {
 	for i := len(m.tasks) - 1; i >= start; i-- {
 		t := m.tasks[i]
 		icon := taskStatusIcon(t.status)
+		if t.status != "done" && t.status != "failed" {
+			icon = m.spinner.View()
+		}
 		stStyle := taskStatusStyle(t.status)
 
 		goal := t.goal
@@ -269,7 +344,7 @@ func (m tuiModel) viewStatusBar() string {
 	}
 
 	socket := styleFaint.Render(" (" + m.gatewayMsg + ")")
-	hint := styleFaint.Render("tab/shift+tab nav  ? help  q quit")
+	hint := styleFaint.Render("tab/shift+tab nav  shift + ? help  q quit")
 	gap := m.width - lipgloss.Width(gwStatus) - lipgloss.Width(socket) - lipgloss.Width(hint) - 4
 	if gap < 1 {
 		gap = 1
@@ -290,7 +365,7 @@ func (m tuiModel) viewHelp() string {
 		{"ctrl+a", "toggle agent name input"},
 		{"esc", "cancel / close"},
 		{"r", "refresh agents"},
-		{"?", "toggle this help"},
+		{"shift + ?", "toggle this help"},
 		{"q / ctrl+c", "quit"},
 	}
 

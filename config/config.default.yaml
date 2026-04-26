@@ -10,6 +10,7 @@
 agents:
   - name: orchestrator
     role: orchestrator
+    max_tokens: 32768
     llm:
       provider: ""
       model: ""
@@ -17,6 +18,7 @@ agents:
 
   - name: worker
     skills: []
+    max_tokens: 65536
     llm:
       provider: ""
       model: ""

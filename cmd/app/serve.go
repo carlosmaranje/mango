@@ -58,6 +58,9 @@ func runServe(parent context.Context, cfg *Config) error {
 	if err := toolReg.Register(tools.NewGoSolarTool()); err != nil {
 		return fmt.Errorf("failed to register gosolar tool: %w", err)
 	}
+	if err := toolReg.Register(tools.NewDateTimeTool()); err != nil {
+		return fmt.Errorf("failed to register datetime tool: %w", err)
+	}
 
 	var orchestratorAgent *agent.Agent
 
@@ -101,6 +104,7 @@ func runServe(parent context.Context, cfg *Config) error {
 			Memory:       mem,
 			Session:      agent.NewSessionStore(),
 			AuthCreds:    ac.AuthCreds,
+			MaxTokens:    ac.MaxTokens,
 		}
 		if err := registry.Register(a); err != nil {
 			return err

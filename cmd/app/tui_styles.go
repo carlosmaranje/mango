@@ -146,6 +146,14 @@ var (
 
 	styleFaint = lipgloss.NewStyle().
 			Foreground(colorDim)
+
+	styleChatUser = lipgloss.NewStyle().
+			Foreground(colorAmber).
+			Bold(true)
+
+	styleChatAgent = lipgloss.NewStyle().
+			Foreground(colorTropicalGrn).
+			Bold(true)
 )
 
 func taskStatusStyle(status string) lipgloss.Style {

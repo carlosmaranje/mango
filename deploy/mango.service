@@ -8,6 +8,7 @@ Restart=on-failure
 RestartSec=5s
 User=mango
 Group=mango
+Environment=MANGO_DIR=/var/lib/mango
 RuntimeDirectory=mango
 StateDirectory=mango
 StandardOutput=journal

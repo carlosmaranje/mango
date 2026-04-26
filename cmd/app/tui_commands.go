@@ -55,3 +55,27 @@ func pollTask2(c *gatewayClient, ctx context.Context, id string, _ int) tea.Cmd 
 		return taskUpdatedMsg(out)
 	})
 }
+
+func submitChatMsg(c *gatewayClient, ctx context.Context, text, agentName string) tea.Cmd {
+	return func() tea.Msg {
+		body := map[string]string{"goal": text}
+		if agentName != "" {
+			body["agent"] = agentName
+		}
+		var out taskDTO
+		if err := c.request(ctx, "POST", "/tasks", body, &out); err != nil {
+			return errMsg{err}
+		}
+		return chatSubmittedMsg(out)
+	}
+}
+
+func pollChatMsg(c *gatewayClient, ctx context.Context, id string) tea.Cmd {
+	return tea.Tick(1500*time.Millisecond, func(_ time.Time) tea.Msg {
+		var out taskDTO
+		if err := c.request(ctx, "GET", "/tasks/"+id, nil, &out); err != nil {
+			return errMsg{err}
+		}
+		return chatUpdatedMsg(out)
+	})
+}

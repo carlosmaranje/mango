@@ -31,6 +31,8 @@ func (s *SessionStore) Snapshot() []llm.Message {
 	return out
 }
 
+const DefaultMaxTokens = 4096
+
 type Agent struct {
 	Name         string
 	WorkDir      string
@@ -40,6 +42,14 @@ type Agent struct {
 	Memory       memory.Store
 	Session      *SessionStore
 	AuthCreds    map[string]string
+	MaxTokens    int
+}
+
+func (a *Agent) EffectiveMaxTokens() int {
+	if a.MaxTokens > 0 {
+		return a.MaxTokens
+	}
+	return DefaultMaxTokens
 }
 
 func (a *Agent) HasSkill(name string) bool {

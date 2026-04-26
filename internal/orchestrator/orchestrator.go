@@ -54,11 +54,15 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 		maxSteps = DefaultMaxSteps
 	}
 
+	useSession := len(history) == 0 && p.Agent.Session != nil
+
 	messages := []llm.Message{
 		{Role: "system", Content: p.Agent.SystemPrompt + "\n\n" + p.agentCatalog()},
 	}
 	if len(history) > 0 {
 		messages = append(messages, history...)
+	} else if p.Agent.Session != nil {
+		messages = append(messages, p.Agent.Session.Snapshot()...)
 	}
 	messages = append(messages, llm.Message{Role: "user", Content: "Goal: " + goal})
 
@@ -66,7 +70,7 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 		log.Printf("orchestrator: step %d — sending %d messages to LLM", step, len(messages))
 		resp, err := p.Agent.LLM.Complete(ctx, llm.CompletionRequest{
 			Messages:  messages,
-			MaxTokens: 1024,
+			MaxTokens: p.Agent.EffectiveMaxTokens(),
 			JSON:      true,
 		})
 		if err != nil {
@@ -89,6 +93,10 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 		if parsed.Action == "finish" {
 			if parsed.Final != "" {
 				log.Printf("orchestrator: step %d — finished with final=%q", step, parsed.Final)
+				if useSession {
+					p.Agent.Session.Append(llm.Message{Role: "user", Content: goal})
+					p.Agent.Session.Append(llm.Message{Role: "assistant", Content: parsed.Final})
+				}
 				return parsed.Final, nil
 			}
 			log.Printf("orchestrator: agent %q returned action=finish with empty \"final\"; retrying with corrective hint (raw=%q)", p.Agent.Name, raw)

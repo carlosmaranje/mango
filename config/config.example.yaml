@@ -12,6 +12,7 @@ discord:
 agents:
   - name: orchestrator
     role: orchestrator
+    max_tokens: 32768
     llm:
       provider: anthropic
       model: claude-sonnet-4-20250514
@@ -20,6 +21,7 @@ agents:
   - name: researcher
     skills:
       - web_search
+    max_tokens: 65536
     llm:
       provider: ollama
       model: llama3.2
@@ -28,6 +30,7 @@ agents:
     skills:
       - code_execution
       - web_search
+    max_tokens: 65536
     llm:
       provider: openai-compatible
       model: qwen2.5-coder
