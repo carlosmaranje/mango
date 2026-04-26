@@ -21,11 +21,11 @@ type LLMConfig struct {
 
 type AgentConfig struct {
 	Name      string            `mapstructure:"name" yaml:"name"`
-	WorkDir   string            `mapstructure:"work_dir" yaml:"work_dir,omitempty"`
 	Role      string            `mapstructure:"role" yaml:"role,omitempty"`
 	Skills    []string          `mapstructure:"skills" yaml:"skills,omitempty"`
 	LLM       LLMConfig         `mapstructure:"llm" yaml:"llm"`
 	AuthCreds map[string]string `mapstructure:"auth_creds" yaml:"auth_creds,omitempty"`
+	MaxTokens int               `mapstructure:"max_tokens" yaml:"max_tokens,omitempty"`
 }
 
 type BindingConfig struct {
@@ -48,33 +48,21 @@ type Config struct {
 }
 
 func defaultSocketPath() string {
-	if envPath := os.Getenv("MANGO_SOCKET_PATH"); envPath != "" {
-		return envPath
+	switch runtime.GOOS {
+	case "windows", "darwin":
+		return filepath.Join(constants.MangoDir(), constants.AppName+".sock")
+	default:
+		return fmt.Sprintf("/var/run/%s/%s.sock", constants.AppName, constants.AppName)
 	}
-	if runtime.GOOS == "darwin" {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			return filepath.Join(home, "."+constants.AppName, constants.AppName+".sock")
-		}
-	}
-	return fmt.Sprintf("/var/run/%s/%s.sock", constants.AppName, constants.AppName)
 }
 
 func defaultConfigPath() string {
-	if envPath := os.Getenv("MANGO_CONFIG"); envPath != "" {
-		return envPath
-	}
-	return fmt.Sprintf("/etc/%s/config.yaml", constants.AppName)
+	return filepath.Join(constants.MangoDir(), "config.yaml")
 }
 
 func loadRawViper(path string) (*viper.Viper, error) {
 	v := viper.New()
 	v.SetDefault("socket_path", defaultSocketPath())
-
-	// Use MANGO_CONFIG if path is not provided via flag
-	if path == "" {
-		path = os.Getenv("MANGO_CONFIG")
-	}
 
 	if path != "" {
 		v.SetConfigFile(path)
@@ -87,7 +75,7 @@ func loadRawViper(path string) (*viper.Viper, error) {
 	} else {
 		v.SetConfigName("config")
 		v.SetConfigType("yaml")
-		v.AddConfigPath(fmt.Sprintf("/etc/%s", constants.AppName))
+		v.AddConfigPath(constants.MangoDir())
 		v.AddConfigPath("./config")
 		v.AddConfigPath(".")
 		if err := v.ReadInConfig(); err != nil {
@@ -124,7 +112,6 @@ func expandConfig(cfg *Config) {
 	cfg.Discord.Token = os.ExpandEnv(cfg.Discord.Token)
 	for i := range cfg.Agents {
 		a := &cfg.Agents[i]
-		a.WorkDir = os.ExpandEnv(a.WorkDir)
 		a.LLM.APIKey = os.ExpandEnv(a.LLM.APIKey)
 		a.LLM.BaseURL = os.ExpandEnv(a.LLM.BaseURL)
 		for k, v := range a.AuthCreds {

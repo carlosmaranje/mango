@@ -52,6 +52,17 @@ func (r *Registry) Execute(ctx context.Context, name, input string) (string, err
 	return t.Execute(ctx, input)
 }
 
+// Clone returns a new Registry pre-populated with the same tools.
+func (r *Registry) Clone() *Registry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	c := NewRegistry()
+	for _, t := range r.tools {
+		c.tools[t.Name()] = t
+	}
+	return c
+}
+
 // Definitions converts all registered tools to the LLM tool-definition format
 // so they can be included in a CompletionRequest.
 func (r *Registry) Definitions() []llm.ToolDef {

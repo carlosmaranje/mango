@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
 
-	"github.com/carlosmaranje/mango/internal/llm"
 	"github.com/carlosmaranje/mango/internal/orchestrator"
 )
 
@@ -18,15 +18,19 @@ const (
 	typingRefreshInterval = 8 * time.Second
 )
 
+const processedMsgTTL = 5 * time.Minute
+
 type Bot struct {
-	session    *discordgo.Session
-	router     *Router
-	history    *ChannelHistory
-	dispatcher *orchestrator.Dispatcher
-	global     bool
+	session       *discordgo.Session
+	router        *Router
+	dispatcher    *orchestrator.Dispatcher
+	global        bool
+	ctx           context.Context
+	mu            sync.Mutex
+	processedMsgs map[string]time.Time
 }
 
-func NewBot(token string, router *Router, history *ChannelHistory, dispatcher *orchestrator.Dispatcher, global bool) (*Bot, error) {
+func NewBot(token string, router *Router, dispatcher *orchestrator.Dispatcher, global bool) (*Bot, error) {
 	sess, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, fmt.Errorf("discord session: %w", err)
@@ -34,11 +38,11 @@ func NewBot(token string, router *Router, history *ChannelHistory, dispatcher *o
 	sess.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsDirectMessages | discordgo.IntentsMessageContent | discordgo.IntentsGuildPresences
 
 	b := &Bot{
-		session:    sess,
-		router:     router,
-		history:    history,
-		dispatcher: dispatcher,
-		global:     global,
+		session:       sess,
+		router:        router,
+		dispatcher:    dispatcher,
+		global:        global,
+		processedMsgs: make(map[string]time.Time),
 	}
 	sess.AddHandler(b.onMessage)
 	sess.AddHandler(b.onReady)
@@ -65,6 +69,7 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 }
 
 func (b *Bot) Start(ctx context.Context) error {
+	b.ctx = ctx
 	if err := b.session.Open(); err != nil {
 		return fmt.Errorf("discord open: %w", err)
 	}
@@ -79,11 +84,30 @@ func (b *Bot) Close() error {
 	return b.session.Close()
 }
 
+func (b *Bot) seen(id string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	now := time.Now()
+	for k, t := range b.processedMsgs {
+		if now.Sub(t) > processedMsgTTL {
+			delete(b.processedMsgs, k)
+		}
+	}
+	if _, ok := b.processedMsgs[id]; ok {
+		return true
+	}
+	b.processedMsgs[id] = now
+	return false
+}
+
 func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if s.State.User != nil && m.Author.ID == s.State.User.ID {
 		return
 	}
 	if m.Author.Bot {
+		return
+	}
+	if b.seen(m.ID) {
 		return
 	}
 
@@ -122,11 +146,7 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		content = strings.TrimSpace(content)
 	}
 
-	priorHistory := b.history.Get(m.ChannelID)
-	b.history.Append(m.ChannelID, llm.Message{Role: "user", Content: content})
-
-	ctx := context.Background()
-	task, err := b.dispatcher.SubmitWithHistory(ctx, content, agentName, priorHistory)
+	task, err := b.dispatcher.Submit(b.ctx, content, agentName, m.ChannelID)
 	if err != nil {
 		log.Printf("discord: dispatch: %v", err)
 		_, _ = s.ChannelMessageSendReply(m.ChannelID, "error: "+err.Error(), m.Reference())
@@ -161,7 +181,14 @@ func (b *Bot) keepTyping(s *discordgo.Session, channelID string, done <-chan str
 
 func (b *Bot) waitAndReply(s *discordgo.Session, m *discordgo.MessageCreate, taskID string, typingDone chan<- struct{}) {
 	defer close(typingDone)
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 	for range taskPollMaxRetries {
+		select {
+		case <-b.ctx.Done():
+			return
+		case <-ticker.C:
+		}
 		t, ok := b.dispatcher.Get(taskID)
 		if !ok {
 			return
@@ -171,12 +198,10 @@ func (b *Bot) waitAndReply(s *discordgo.Session, m *discordgo.MessageCreate, tas
 			if t.Status == orchestrator.StatusFailed {
 				reply = "error: " + t.Error
 			}
-			b.history.Append(m.ChannelID, llm.Message{Role: "assistant", Content: reply})
 			if _, err := s.ChannelMessageSendReply(m.ChannelID, reply, m.Reference()); err != nil {
 				log.Printf("discord: send reply: %v", err)
 			}
 			return
 		}
-		time.Sleep(time.Second)
 	}
 }

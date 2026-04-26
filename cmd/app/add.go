@@ -57,7 +57,7 @@ func newAddSkillCmd() *cobra.Command {
 
 // runAddAgent handles the interactive agent scaffolding flow.
 func runAddAgent(name string, in *bufio.Reader, out io.Writer) error {
-	agentsDir := agent.ResolveAgentsDir("")
+	agentsDir := agent.ResolveAgentsDir()
 	path := agent.AgentDefinitionPath(agentsDir, name)
 
 	if _, err := os.Stat(path); err == nil {
@@ -127,7 +127,7 @@ func runAddAgent(name string, in *bufio.Reader, out io.Writer) error {
 
 // runAddSkill handles the interactive skill scaffolding flow.
 func runAddSkill(name string, in *bufio.Reader, out io.Writer) error {
-	skillsDir := skill.ResolveSkillsDir("")
+	skillsDir := skill.ResolveSkillsDir()
 	path := filepath.Join(skillsDir, name+".md")
 
 	if _, err := os.Stat(path); err == nil {
@@ -283,9 +283,8 @@ func appendAgentToConfig(name string, skills []string, provider, model, apiKey, 
 	}
 
 	entry := AgentConfig{
-		Name:    name,
-		WorkDir: fmt.Sprintf("/var/lib/mango/agents/%s", name),
-		Skills:  skills,
+		Name:   name,
+		Skills: skills,
 		LLM: LLMConfig{
 			Provider: provider,
 			Model:    model,

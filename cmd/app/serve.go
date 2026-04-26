@@ -7,12 +7,10 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"syscall"
 
 	"github.com/spf13/cobra"
 
 	"github.com/carlosmaranje/mango/internal/agent"
-	"github.com/carlosmaranje/mango/internal/constants"
 	"github.com/carlosmaranje/mango/internal/discord"
 	"github.com/carlosmaranje/mango/internal/gateway"
 	"github.com/carlosmaranje/mango/internal/llm"
@@ -31,17 +29,25 @@ func newServeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runServe(cmd.Context(), cfg)
+			return runServe(cmd.Context(), cfg, configPath)
 		},
 	}
 }
 
-func runServe(parent context.Context, cfg *Config) error {
-	ctx, cancel := signal.NotifyContext(parent, syscall.SIGINT, syscall.SIGTERM)
+func runServe(parent context.Context, cfg *Config, cfgPath string) error {
+	ctx, cancel := signal.NotifyContext(parent, shutdownSignals...)
 	defer cancel()
 
-	agentsDir := agent.ResolveAgentsDir("")
-	skillsDir := skill.ResolveSkillsDir("")
+	agentsDir := agent.ResolveAgentsDir()
+	skillsDir := skill.ResolveSkillsDir()
+	socketDir := filepath.Dir(cfg.SocketPath)
+
+	for _, dir := range []string{agentsDir, skillsDir, socketDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("create dir %s: %w", dir, err)
+		}
+	}
+
 	skillLoader := skill.NewLoader(skillsDir)
 
 	registry := agent.NewRegistry()
@@ -51,6 +57,9 @@ func runServe(parent context.Context, cfg *Config) error {
 
 	if err := toolReg.Register(tools.NewGoSolarTool()); err != nil {
 		return fmt.Errorf("failed to register gosolar tool: %w", err)
+	}
+	if err := toolReg.Register(tools.NewDateTimeTool()); err != nil {
+		return fmt.Errorf("failed to register datetime tool: %w", err)
 	}
 
 	var orchestratorAgent *agent.Agent
@@ -71,10 +80,7 @@ func runServe(parent context.Context, cfg *Config) error {
 			return fmt.Errorf("agent %q: %w", ac.Name, err)
 		}
 
-		workDir := ac.WorkDir
-		if workDir == "" {
-			workDir = filepath.Join(os.TempDir(), constants.AppName, ac.Name)
-		}
+		workDir := filepath.Join(agent.ResolveAgentsDir(), ac.Name)
 		mem, err := memory.Open(workDir)
 		if err != nil {
 			return fmt.Errorf("agent %q memory: %w", ac.Name, err)
@@ -86,7 +92,7 @@ func runServe(parent context.Context, cfg *Config) error {
 			return fmt.Errorf("agent %q: %w", ac.Name, err)
 		}
 		if len(ac.Skills) > 0 {
-			log.Printf("agent %q: loaded skills %v from %s", ac.Name, ac.Skills, skillsDir)
+			log.Printf("agent %q: loaded skills %v from %s", ac.Name, ac.Skills, skill.ResolveSkillsDir())
 		}
 
 		a := &agent.Agent{
@@ -96,13 +102,17 @@ func runServe(parent context.Context, cfg *Config) error {
 			Skills:       ac.Skills,
 			SystemPrompt: systemPrompt,
 			Memory:       mem,
-			Session:      agent.NewSessionStore(),
 			AuthCreds:    ac.AuthCreds,
+			MaxTokens:    ac.MaxTokens,
 		}
 		if err := registry.Register(a); err != nil {
 			return err
 		}
-		runner := agent.NewRunner(a, toolReg, 0)
+		agentToolReg := toolReg.Clone()
+		if err := agentToolReg.Register(tools.NewIdentityTool(ac.Name, cfg.SocketPath, cfgPath)); err != nil {
+			return fmt.Errorf("agent %q: register identity tool: %w", ac.Name, err)
+		}
+		runner := agent.NewRunner(a, agentToolReg, 0)
 		runners[a.Name] = runner
 		if err := runner.Start(ctx); err != nil {
 			return err
@@ -122,6 +132,7 @@ func runServe(parent context.Context, cfg *Config) error {
 	}
 	dispatcher := orchestrator.NewDispatcher(registry, runners, orch)
 
+	// This is where the gateway starts
 	gw := gateway.NewServer(cfg.SocketPath, registry, runners, dispatcher)
 	if err := gw.Start(ctx); err != nil {
 		return err
@@ -134,8 +145,7 @@ func runServe(parent context.Context, cfg *Config) error {
 			bindings = append(bindings, discord.ChannelBinding{ChannelID: b.ChannelID, AgentName: b.Agent})
 		}
 		router := discord.NewRouter(bindings)
-		history := discord.NewChannelHistory(discord.DefaultHistorySize)
-		bot, err := discord.NewBot(cfg.Discord.Token, router, history, dispatcher, cfg.Discord.Global)
+		bot, err := discord.NewBot(cfg.Discord.Token, router, dispatcher, cfg.Discord.Global)
 		if err != nil {
 			return err
 		}

@@ -6,24 +6,16 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/carlosmaranje/mango/internal/constants"
 	"github.com/carlosmaranje/mango/internal/skill"
 )
 
-const (
-	DefaultAgentsDir = "/etc/mango/agents"
-	PromptSeparator  = "\n\n---\n\n"
-)
+const PromptSeparator = "\n\n---\n\n"
 
-// ResolveAgentsDir returns the explicit path when non-empty, otherwise the
-// value of MANGO_AGENTS_DIR, otherwise DefaultAgentsDir.
-func ResolveAgentsDir(explicit string) string {
-	if explicit != "" {
-		return explicit
-	}
-	if env := os.Getenv("MANGO_AGENTS_DIR"); env != "" {
-		return env
-	}
-	return DefaultAgentsDir
+// ResolveAgentsDir returns the explicit path when non-empty, otherwise
+// MANGO_DIR/agents (see constants.MangoDir).
+func ResolveAgentsDir() string {
+	return filepath.Join(constants.MangoDir(), "agents")
 }
 
 // AgentDefinitionPath returns the canonical path to an agent's .md file

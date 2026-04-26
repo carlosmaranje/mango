@@ -1,10 +1,10 @@
-socket_path: /var/run/mango/mango.sock
-
-# Agent definitions are loaded from MANGO_AGENTS_DIR (default: /etc/mango/agents/).
-# Skill definitions are loaded from MANGO_SKILLS_DIR (default: /etc/mango/skills/).
-# Each agent's effective system prompt is assembled at startup by reading
-# <agents_dir>/<NAME>.md then appending every skill .md listed under `skills:`
-# (in order), separated by "\n\n---\n\n".
+# All runtime files (socket, config, agents, skills, memory) live under
+# MANGO_DIR (default: ~/.mango). Override by setting MANGO_DIR=/your/path.
+#
+# Agent definitions: MANGO_DIR/agents/<NAME>.md
+# Skill definitions: MANGO_DIR/skills/<name>.md
+# Each agent's system prompt is assembled at startup by reading its .md then
+# appending every skill .md listed under `skills:` (separated by "\n\n---\n\n").
 
 discord:
   token: "${DISCORD_TOKEN}"
@@ -12,25 +12,25 @@ discord:
 agents:
   - name: orchestrator
     role: orchestrator
-    work_dir: /var/lib/mango/agents/orchestrator
+    max_tokens: 32768
     llm:
       provider: anthropic
       model: claude-sonnet-4-20250514
       api_key: "${ANTHROPIC_API_KEY}"
 
   - name: researcher
-    work_dir: /var/lib/mango/agents/researcher
     skills:
       - web_search
+    max_tokens: 65536
     llm:
       provider: ollama
       model: llama3.2
 
   - name: coder
-    work_dir: /var/lib/mango/agents/coder
     skills:
       - code_execution
       - web_search
+    max_tokens: 65536
     llm:
       provider: openai-compatible
       model: qwen2.5-coder

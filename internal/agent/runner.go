@@ -138,11 +138,7 @@ func (r *Runner) invokeLLM(ctx context.Context, goal string, history []llm.Messa
 	}
 
 	messages := []llm.Message{{Role: "system", Content: r.Agent.SystemPrompt}}
-	if len(history) > 0 {
-		messages = append(messages, history...)
-	} else if r.Agent.Session != nil {
-		messages = append(messages, r.Agent.Session.Snapshot()...)
-	}
+	messages = append(messages, history...)
 	messages = append(messages, llm.Message{Role: "user", Content: goal})
 
 	var toolDefs []llm.ToolDef
@@ -150,13 +146,11 @@ func (r *Runner) invokeLLM(ctx context.Context, goal string, history []llm.Messa
 		toolDefs = r.toolReg.Definitions()
 	}
 
-	useSession := len(history) == 0 && r.Agent.Session != nil
-
 	for step := 1; ; step++ {
 		log.Printf("agent %q: step %d — sending %d messages to LLM (tools: %d)", r.Agent.Name, step, len(messages), len(toolDefs))
 		resp, err := r.Agent.LLM.Complete(ctx, llm.CompletionRequest{
 			Messages:  messages,
-			MaxTokens: 1024,
+			MaxTokens: r.Agent.EffectiveMaxTokens(),
 			JSON:      jsonResponse,
 			Tools:     toolDefs,
 		})
@@ -167,10 +161,6 @@ func (r *Runner) invokeLLM(ctx context.Context, goal string, history []llm.Messa
 		log.Printf("agent %q: step %d — content=%q toolCalls=%d", r.Agent.Name, step, resp.Content, len(resp.ToolCalls))
 
 		if len(resp.ToolCalls) == 0 {
-			if useSession {
-				r.Agent.Session.Append(llm.Message{Role: "user", Content: goal})
-				r.Agent.Session.Append(llm.Message{Role: "assistant", Content: resp.Content})
-			}
 			return resp.Content, nil
 		}
 

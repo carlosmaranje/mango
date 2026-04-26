@@ -12,6 +12,47 @@ import (
 	"github.com/carlosmaranje/mango/internal/llm"
 )
 
+const defaultSessionSize = 200
+
+type sessionStore struct {
+	mu      sync.Mutex
+	maxSize int
+	data    map[string][]llm.Message
+}
+
+func newSessionStore() *sessionStore {
+	return &sessionStore{maxSize: defaultSessionSize, data: make(map[string][]llm.Message)}
+}
+
+func (s *sessionStore) get(id string) []llm.Message {
+	if id == "" {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	buf := s.data[id]
+	if len(buf) == 0 {
+		return nil
+	}
+	out := make([]llm.Message, len(buf))
+	copy(out, buf)
+	return out
+}
+
+func (s *sessionStore) append(id string, msg llm.Message) {
+	if id == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	buf := s.data[id]
+	buf = append(buf, msg)
+	if len(buf) > s.maxSize {
+		buf = buf[len(buf)-s.maxSize:]
+	}
+	s.data[id] = buf
+}
+
 type Dispatcher struct {
 	registry *agent.Registry
 	runners  map[string]*agent.Runner
@@ -20,6 +61,7 @@ type Dispatcher struct {
 	tasks map[string]*Task
 
 	orchestrator *Orchestrator
+	sessions     *sessionStore
 }
 
 func NewDispatcher(reg *agent.Registry, runners map[string]*agent.Runner, orch *Orchestrator) *Dispatcher {
@@ -28,6 +70,7 @@ func NewDispatcher(reg *agent.Registry, runners map[string]*agent.Runner, orch *
 		runners:      runners,
 		tasks:        make(map[string]*Task),
 		orchestrator: orch,
+		sessions:     newSessionStore(),
 	}
 }
 
@@ -37,19 +80,21 @@ func newTaskID() string {
 	return hex.EncodeToString(b[:])
 }
 
-func (d *Dispatcher) Submit(ctx context.Context, goal, agentName string) (*Task, error) {
-	return d.SubmitWithHistory(ctx, goal, agentName, nil)
-}
+func (d *Dispatcher) Submit(ctx context.Context, goal, agentName, sessionID string) (*Task, error) {
+	history := d.sessions.get(sessionID)
+	if sessionID != "" {
+		d.sessions.append(sessionID, llm.Message{Role: "user", Content: goal})
+	}
 
-func (d *Dispatcher) SubmitWithHistory(ctx context.Context, goal, agentName string, history []llm.Message) (*Task, error) {
 	task := &Task{
 		ID:        newTaskID(),
 		Goal:      goal,
 		AgentName: agentName,
+		SessionID: sessionID,
 		Status:    StatusPending,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
-		History:   history,
+		history:   history,
 	}
 	d.mu.Lock()
 	d.tasks[task.ID] = task
@@ -83,17 +128,19 @@ func (d *Dispatcher) run(ctx context.Context, task *Task) {
 	d.update(task.ID, func(t *Task) { t.Status = StatusRunning })
 
 	if task.AgentName == "" && d.orchestrator != nil {
-		result, err := d.orchestrator.Run(ctx, task.Goal, task.History, d)
+		result, err := d.orchestrator.Run(ctx, task.Goal, task.history, d)
 		d.finalize(task.ID, result, err)
 		return
 	}
 
-	result, err := d.RunOnAgentWithHistory(ctx, task.AgentName, task.Goal, task.History, false)
+	result, err := d.RunOnAgentWithHistory(ctx, task.AgentName, task.Goal, task.history, false)
 	d.finalize(task.ID, result, err)
 }
 
 func (d *Dispatcher) finalize(id, result string, err error) {
+	var sessionID string
 	d.update(id, func(t *Task) {
+		sessionID = t.SessionID
 		if err != nil {
 			t.Status = StatusFailed
 			t.Error = err.Error()
@@ -102,6 +149,9 @@ func (d *Dispatcher) finalize(id, result string, err error) {
 		t.Status = StatusDone
 		t.Result = result
 	})
+	if err == nil && result != "" {
+		d.sessions.append(sessionID, llm.Message{Role: "assistant", Content: result})
+	}
 }
 
 func (d *Dispatcher) RunOnAgent(ctx context.Context, agentName, goal string, jsonResponse bool) (string, error) {

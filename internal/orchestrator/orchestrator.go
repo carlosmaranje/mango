@@ -57,16 +57,14 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 	messages := []llm.Message{
 		{Role: "system", Content: p.Agent.SystemPrompt + "\n\n" + p.agentCatalog()},
 	}
-	if len(history) > 0 {
-		messages = append(messages, history...)
-	}
+	messages = append(messages, history...)
 	messages = append(messages, llm.Message{Role: "user", Content: "Goal: " + goal})
 
 	for step := 0; step < maxSteps; step++ {
 		log.Printf("orchestrator: step %d — sending %d messages to LLM", step, len(messages))
 		resp, err := p.Agent.LLM.Complete(ctx, llm.CompletionRequest{
 			Messages:  messages,
-			MaxTokens: 1024,
+			MaxTokens: p.Agent.EffectiveMaxTokens(),
 			JSON:      true,
 		})
 		if err != nil {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -15,7 +14,7 @@ import (
 var configPath string
 
 func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, cancel := signal.NotifyContext(context.Background(), shutdownSignals...)
 	defer cancel()
 
 	root := &cobra.Command{
@@ -23,8 +22,15 @@ func main() {
 		Short:         "Agent Gateway — multi-agent orchestration with Discord and a CLI control plane",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig(configPath)
+			if err != nil {
+				return err
+			}
+			return runTUI(cfg)
+		},
 	}
-	root.PersistentFlags().StringVar(&configPath, "config", "", fmt.Sprintf("path to config.yaml (default: /etc/%s/config.yaml or ./config.yaml, can be overridden by MANGO_CONFIG)", constants.AppName))
+	root.PersistentFlags().StringVar(&configPath, "config", "", fmt.Sprintf("path to config.yaml (default: MANGO_DIR/config.yaml, where MANGO_DIR defaults to ~/.%s)", constants.AppName))
 
 	root.AddCommand(
 		newServeCmd(),
