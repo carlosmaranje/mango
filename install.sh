@@ -141,7 +141,7 @@ DISCORD_CONFIGURED=0
 echo ""
 read -p "Configure Discord bot now? (y/N) " -n 1 -r </dev/tty
 echo
-if [[ $REPLY =~ ^[Yy]$ ]] && [ -f "$MANGO_DIR/config.yaml" ]; then
+if [[ $REPLY =~ ^[Yy]$ ]] && sudo -u mango test -f "$MANGO_DIR/config.yaml"; then
 	read -p "  Discord bot token: " discord_token </dev/tty
 	if [ -n "$discord_token" ]; then
 		echo "  Bind the bot to:"
