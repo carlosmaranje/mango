@@ -39,14 +39,14 @@ func TestLoader_MissingSkillReturnsDescriptiveError(t *testing.T) {
 }
 
 func TestResolveSkillsDir_PrefersExplicit(t *testing.T) {
-	if got := ResolveSkillsDir("/explicit"); got != "/explicit" {
+	if got := ResolveSkillsDir(); got != "/explicit" {
 		t.Errorf("got %q, want /explicit", got)
 	}
 }
 
 func TestResolveSkillsDir_UsesMangoDir(t *testing.T) {
 	t.Setenv("MANGO_DIR", "/custom/mango")
-	if got := ResolveSkillsDir(""); got != "/custom/mango/skills" {
+	if got := ResolveSkillsDir(); got != "/custom/mango/skills" {
 		t.Errorf("got %q, want /custom/mango/skills", got)
 	}
 }
@@ -55,7 +55,7 @@ func TestResolveSkillsDir_Default(t *testing.T) {
 	t.Setenv("MANGO_DIR", "")
 	home, _ := os.UserHomeDir()
 	want := filepath.Join(home, ".mango", "skills")
-	if got := ResolveSkillsDir(""); got != want {
+	if got := ResolveSkillsDir(); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }

@@ -20,17 +20,14 @@ type Loader struct {
 
 func NewLoader(dir string) *Loader {
 	if dir == "" {
-		dir = ResolveSkillsDir("")
+		dir = ResolveSkillsDir()
 	}
 	return &Loader{Dir: dir}
 }
 
 // ResolveSkillsDir returns the explicit path when non-empty, otherwise
 // MANGO_DIR/skills (see constants.MangoDir).
-func ResolveSkillsDir(explicit string) string {
-	if explicit != "" {
-		return explicit
-	}
+func ResolveSkillsDir() string {
 	return filepath.Join(constants.MangoDir(), "skills")
 }
 

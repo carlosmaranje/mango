@@ -229,13 +229,13 @@ mango task submit "goal"
 
 ## External Dependencies
 
-| Service | Config key | Required? |
-|---|---|---|
-| Anthropic API | `api_key: ${ANTHROPIC_API_KEY}` per agent | If using Anthropic |
-| OpenAI API | `api_key` + `base_url` per agent | If using OpenAI |
-| Ollama (local) | `base_url: http://localhost:11434/v1` | If using local LLMs |
-| Discord | `discord.token: ${DISCORD_TOKEN}` | Optional |
-| SQLite | auto-created at `work_dir/memory.db` | Auto |
+| Service        | Config key                                | Required?           |
+|----------------|-------------------------------------------|---------------------|
+| Anthropic API  | `api_key: ${ANTHROPIC_API_KEY}` per agent | If using Anthropic  |
+| OpenAI API     | `api_key` + `base_url` per agent          | If using OpenAI     |
+| Ollama (local) | `base_url: http://localhost:11434/v1`     | If using local LLMs |
+| Discord        | `discord.token: ${DISCORD_TOKEN}`         | Optional            |
+| SQLite         | auto-created at `work_dir/memory.db`      | Auto                |
 
 ---
 

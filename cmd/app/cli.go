@@ -237,7 +237,7 @@ func newAgentCreateCmd() *cobra.Command {
 				return fmt.Errorf("agent name cannot be empty")
 			}
 
-			dir := agent.ResolveAgentsDir("")
+			dir := agent.ResolveAgentsDir()
 			path := agent.AgentDefinitionPath(dir, name)
 
 			if _, err := os.Stat(path); err == nil {

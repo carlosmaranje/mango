@@ -43,7 +43,7 @@ echo "  1. Build the mango binary"
 echo "  2. Install it to /usr/local/bin/mango"
 echo "  3. Create a 'mango' system user"
 echo "  4. Install systemd service file"
-echo "  5. Copy config to /etc/mango/config.yaml"
+echo "  5. Copy config to ~/.mango/ (resolved from the mango system user's home)"
 echo ""
 echo "You will be prompted for your sudo password."
 echo ""
@@ -70,7 +70,7 @@ sudo chmod +x /usr/local/bin/mango
 # Create system user
 echo "Creating 'mango' system user..."
 if ! id -u mango &> /dev/null; then
-	sudo useradd --system --no-create-home --shell /usr/sbin/nologin mango
+	sudo useradd --system --create-home --home-dir /var/lib/mango --shell /usr/sbin/nologin mango
 	echo "  Created user: mango"
 else
 	echo "  User 'mango' already exists"
@@ -81,16 +81,24 @@ echo "Installing systemd service file..."
 sudo cp deploy/mango.service /etc/systemd/system/mango.service
 sudo systemctl daemon-reload
 
+# Resolve the mango data directory: honour MANGO_DIR if the caller set it,
+# otherwise derive ~/.mango from the mango system user's home.
+if [ -z "$MANGO_DIR" ]; then
+	MANGO_HOME=$(getent passwd mango | cut -d: -f6)
+	MANGO_DIR="$MANGO_HOME/.mango"
+fi
+export MANGO_DIR
+
 # Create config directory and install default config
 echo "Setting up configuration..."
-sudo mkdir -p /etc/mango
-if [ -f /etc/mango/config.yaml ]; then
-	echo "  /etc/mango/config.yaml already exists"
+sudo -u mango mkdir -p "$MANGO_DIR/agents" "$MANGO_DIR/skills"
+if [ -f "$MANGO_DIR/config.yaml" ]; then
+	echo "  $MANGO_DIR/config.yaml already exists"
 	read -p "  Replace with default config? (y/N) " -n 1 -r </dev/tty
 	echo
 	if [[ $REPLY =~ ^[Yy]$ ]]; then
 		if [ -f config/config.default.yaml ]; then
-			sudo cp config/config.default.yaml /etc/mango/config.yaml
+			sudo -u mango cp config/config.default.yaml "$MANGO_DIR/config.yaml"
 			echo "  Installed default config with orchestrator + worker agents"
 		else
 			echo "  Warning: config/config.default.yaml not found; keeping existing config"
@@ -99,39 +107,34 @@ if [ -f /etc/mango/config.yaml ]; then
 		echo "  Keeping existing config"
 	fi
 elif [ -f config/config.default.yaml ]; then
-	sudo cp config/config.default.yaml /etc/mango/config.yaml
+	sudo -u mango cp config/config.default.yaml "$MANGO_DIR/config.yaml"
 	echo "  Installed default config with orchestrator + worker agents"
 else
 	echo "  Warning: config/config.default.yaml not found; skipping config install"
 fi
 
-sudo mkdir -p /etc/mango/agents /etc/mango/skills
-echo "  Created /etc/mango/agents and /etc/mango/skills"
-
 # Install default agent definitions
 for agent in ORCHESTRATOR WORKER; do
 	agent_file="config/agents/${agent}.md"
 	if [ -f "$agent_file" ]; then
-		target="/etc/mango/agents/${agent}.md"
+		target="$MANGO_DIR/agents/${agent}.md"
 		if [ -f "$target" ]; then
 			echo "  $target already exists"
 			read -p "    Replace? (y/N) " -n 1 -r </dev/tty
 			echo
 			if [[ $REPLY =~ ^[Yy]$ ]]; then
-				sudo cp "$agent_file" "$target"
+				sudo -u mango cp "$agent_file" "$target"
 				echo "    Updated $agent.md"
 			fi
 		else
-			sudo cp "$agent_file" "$target"
+			sudo -u mango cp "$agent_file" "$target"
 			echo "    Installed $agent.md"
 		fi
 	fi
 done
 
-echo "  Run 'mango agent create <name>' to scaffold a new agent definition"
+echo "  Run 'mango add agent <name>' to scaffold a new agent definition"
 
-# Set ownership
-sudo chown -R mango:mango /etc/mango /etc/mango/agents
 sudo chown mango:mango /usr/local/bin/mango
 
 # Optional interactive Discord setup
@@ -139,7 +142,7 @@ DISCORD_CONFIGURED=0
 echo ""
 read -p "Configure Discord bot now? (y/N) " -n 1 -r </dev/tty
 echo
-if [[ $REPLY =~ ^[Yy]$ ]] && [ -f /etc/mango/config.yaml ]; then
+if [[ $REPLY =~ ^[Yy]$ ]] && [ -f "$MANGO_DIR/config.yaml" ]; then
 	read -p "  Discord bot token: " discord_token </dev/tty
 	if [ -n "$discord_token" ]; then
 		echo "  Bind the bot to:"
@@ -181,9 +184,8 @@ if [[ $REPLY =~ ^[Yy]$ ]] && [ -f /etc/mango/config.yaml ]; then
 				echo ""
 			fi
 		} > "$tmpfile"
-		sudo cat /etc/mango/config.yaml >> "$tmpfile"
-		sudo mv "$tmpfile" /etc/mango/config.yaml
-		sudo chown mango:mango /etc/mango/config.yaml
+		sudo -u mango cat "$MANGO_DIR/config.yaml" >> "$tmpfile"
+		sudo -u mango mv "$tmpfile" "$MANGO_DIR/config.yaml"
 		DISCORD_CONFIGURED=1
 		echo "  Discord configured"
 	else
@@ -205,14 +207,14 @@ configure_agent() {
 	read -p "  api_key (or \${ENV_VAR}, leave blank for ollama): " api_key </dev/tty
 	read -p "  base_url (leave blank for default): " base_url </dev/tty
 
-	local args=(--config /etc/mango/config.yaml config agent edit "$agent_name" --provider "$provider" --model "$model")
+	local args=(config agent edit "$agent_name" --provider "$provider" --model "$model")
 	if [ -n "$api_key" ]; then
 		args+=(--api-key "$api_key")
 	fi
 	if [ -n "$base_url" ]; then
 		args+=(--base-url "$base_url")
 	fi
-	sudo -u mango /usr/local/bin/mango "${args[@]}"
+	sudo -u mango env MANGO_DIR="$MANGO_DIR" /usr/local/bin/mango "${args[@]}"
 	echo "  $agent_name configured"
 }
 
@@ -234,7 +236,7 @@ if [ "$CONFIGURED" -eq 0 ] || [ "$DISCORD_CONFIGURED" -eq 0 ]; then
 	echo ""
 	if [ "$CONFIGURED" -eq 0 ]; then
 		echo "LLM providers were not configured. Fill in provider, model, and api_key"
-		echo "for the orchestrator and worker agents in /etc/mango/config.yaml."
+		echo "for the orchestrator and worker agents in $MANGO_DIR/config.yaml."
 		echo ""
 		echo "Supported providers:"
 		echo "  - anthropic: Requires ANTHROPIC_API_KEY"
@@ -244,12 +246,12 @@ if [ "$CONFIGURED" -eq 0 ] || [ "$DISCORD_CONFIGURED" -eq 0 ]; then
 	fi
 	if [ "$DISCORD_CONFIGURED" -eq 0 ]; then
 		echo "Discord was not configured. To enable, add a discord block (and optional"
-		echo "bindings) to /etc/mango/config.yaml."
+		echo "bindings) to $MANGO_DIR/config.yaml."
 		echo ""
 	fi
 	echo "After editing the config, reload systemd to apply:"
 	echo ""
-	echo "  sudo nano /etc/mango/config.yaml"
+	echo "  sudo -u mango nano $MANGO_DIR/config.yaml"
 	echo "  sudo systemctl daemon-reload"
 	echo "  sudo systemctl restart mango"
 	echo ""

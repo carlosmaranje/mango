@@ -69,7 +69,6 @@ func loadRawViper(path string) (*viper.Viper, error) {
 		v.SetConfigName("config")
 		v.SetConfigType("yaml")
 		v.AddConfigPath(constants.MangoDir())
-		v.AddConfigPath(fmt.Sprintf("/etc/%s", constants.AppName))
 		v.AddConfigPath("./config")
 		v.AddConfigPath(".")
 		if err := v.ReadInConfig(); err != nil {

@@ -14,10 +14,7 @@ const PromptSeparator = "\n\n---\n\n"
 
 // ResolveAgentsDir returns the explicit path when non-empty, otherwise
 // MANGO_DIR/agents (see constants.MangoDir).
-func ResolveAgentsDir(explicit string) string {
-	if explicit != "" {
-		return explicit
-	}
+func ResolveAgentsDir() string {
 	return filepath.Join(constants.MangoDir(), "agents")
 }
 

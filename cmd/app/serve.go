@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/carlosmaranje/mango/internal/agent"
-	"github.com/carlosmaranje/mango/internal/constants"
 	"github.com/carlosmaranje/mango/internal/discord"
 	"github.com/carlosmaranje/mango/internal/gateway"
 	"github.com/carlosmaranje/mango/internal/llm"
@@ -39,9 +38,8 @@ func runServe(parent context.Context, cfg *Config) error {
 	ctx, cancel := signal.NotifyContext(parent, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	agentsDir := agent.ResolveAgentsDir("")
-	skillsDir := skill.ResolveSkillsDir("")
-	skillLoader := skill.NewLoader(skillsDir)
+	agentsDir := agent.ResolveAgentsDir()
+	skillLoader := skill.NewLoader("")
 
 	registry := agent.NewRegistry()
 	runners := map[string]*agent.Runner{}
@@ -70,7 +68,7 @@ func runServe(parent context.Context, cfg *Config) error {
 			return fmt.Errorf("agent %q: %w", ac.Name, err)
 		}
 
-		workDir := filepath.Join(constants.MangoDir(), "agents", ac.Name)
+		workDir := filepath.Join(agent.ResolveAgentsDir(), ac.Name)
 		mem, err := memory.Open(workDir)
 		if err != nil {
 			return fmt.Errorf("agent %q memory: %w", ac.Name, err)
@@ -82,7 +80,7 @@ func runServe(parent context.Context, cfg *Config) error {
 			return fmt.Errorf("agent %q: %w", ac.Name, err)
 		}
 		if len(ac.Skills) > 0 {
-			log.Printf("agent %q: loaded skills %v from %s", ac.Name, ac.Skills, skillsDir)
+			log.Printf("agent %q: loaded skills %v from %s", ac.Name, ac.Skills, skill.ResolveSkillsDir())
 		}
 
 		a := &agent.Agent{
