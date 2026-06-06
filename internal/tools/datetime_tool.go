@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -92,6 +94,22 @@ func timeOfTheDay(time time.Time) string {
 	return ""
 }
 
+// localZoneName returns the IANA timezone name for the system local zone.
+// It checks TZ env var first, then /etc/timezone, then falls back to the
+// abbreviated zone name (e.g. "CET").
+func localZoneName() string {
+	if tz := os.Getenv("TZ"); tz != "" {
+		return tz
+	}
+	if data, err := os.ReadFile("/etc/timezone"); err == nil {
+		if tz := strings.TrimSpace(string(data)); tz != "" {
+			return tz
+		}
+	}
+	name, _ := time.Now().Zone()
+	return name
+}
+
 func (d *DateTimeTool) Execute(_ context.Context, input string) (string, error) {
 	var req DateTimeInput
 	if input != "" && input != "{}" {
@@ -100,12 +118,18 @@ func (d *DateTimeTool) Execute(_ context.Context, input string) (string, error) 
 		}
 	}
 
+	var (
+		loc *time.Location
+		err error
+	)
 	if req.Timezone == "" {
-		req.Timezone = "UTC"
-	}
-	loc, err := time.LoadLocation(req.Timezone)
-	if err != nil {
-		return "", fmt.Errorf("unknown timezone %q: %w", req.Timezone, err)
+		loc = time.Local
+		req.Timezone = localZoneName()
+	} else {
+		loc, err = time.LoadLocation(req.Timezone)
+		if err != nil {
+			return "", fmt.Errorf("unknown timezone %q: %w", req.Timezone, err)
+		}
 	}
 
 	now := time.Now().In(loc)
