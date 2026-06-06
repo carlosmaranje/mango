@@ -9,16 +9,16 @@
 ## Architecture Overview
 
 ```
-CLI (mango <cmd>)
-       │
-       ▼ HTTP over Unix socket (~/.mango/mango.sock)
-  Gateway Server  ─────────────────────────────────────
-       │                                               │
-       ▼                                               ▼
+CLI (mango <cmd>)          Browser / Remote Client
+       │                            │
+       ▼ HTTP/Unix socket           ▼ HTTP/TCP (http_addr) + SSE (/events)
+  Gateway Server  ──────────────────────────────────────
+       │                                                │
+       ▼                                                ▼
   Dispatcher ──► Orchestrator (orchestrator agent)    Discord Bot
-       │              │                               │
-       ▼              ▼ FanOut                        ▼
-   Agent Runners  (parallel goroutines)       router.Resolve(channelID)
+       │              │                                │
+       ▼              ▼ FanOut                         ▼
+   Agent Runners  (parallel goroutines)        router.Resolve(channelID)
        │
        ▼
    LLM Client (Anthropic / OpenAI / Ollama)
@@ -44,33 +44,94 @@ CLI (mango <cmd>)
 
 ---
 
+## Directory Layout
+
+All runtime files live under a single root called `MANGO_DIR`.
+
+| Env var | Default | Fallback |
+|---|---|---|
+| `MANGO_DIR` | `~/.mango` | `/etc/mango` (when `$HOME` is unavailable) |
+
+`MANGO_DIR` is the **only** env var that controls paths. There is no `MANGO_CONFIG`, `MANGO_SOCKET_PATH`, `MANGO_AGENTS_DIR`, or `MANGO_SKILLS_DIR`.
+
+| Path | Purpose | Override |
+|---|---|---|
+| `$MANGO_DIR/config.yaml` | Main config file | `--config` flag |
+| `$MANGO_DIR/agents/<NAME>.md` | Agent definition (uppercase) | — |
+| `$MANGO_DIR/agents/<name>/` | Agent work dir (SQLite memory) | — |
+| `$MANGO_DIR/skills/<name>.md` | Skill definition | — |
+| `$MANGO_DIR/mango.sock` *(macOS/Windows)* | Unix socket | `socket_path` in config |
+| `/var/run/mango/mango.sock` *(Linux)* | Unix socket | `socket_path` in config |
+
+---
+
 ## Configuration Path Priority
 
 1. **Explicit flag**: `--config /path/to/config.yaml`
-2. **Environment variable**: `MANGO_CONFIG=/path/to/config.yaml`
-3. **System-wide**: `/etc/mango/config.yaml`
-4. **Project config dir**: `./config/config.yaml`
-5. **Current directory**: `./config.yaml`
+2. **`$MANGO_DIR/config.yaml`** (MANGO_DIR defaults to `~/.mango`)
+3. **`./config/config.yaml`**
+4. **`./config.yaml`**
 
-New configuration created via the CLI (e.g., `mango config set`) defaults to `MANGO_CONFIG` if set, otherwise `/etc/mango/config.yaml` (if no configuration is found).
+When no config file is found the CLI writes new config to `$MANGO_DIR/config.yaml`.
 
 ---
 
 ## Socket Path Configuration
 
-The socket path (Unix domain socket for IPC) can be configured in three ways, in order of priority:
+The Unix socket path can be configured in two ways, in order of priority:
 
-1. **Config file** (`config.yaml`): Set `socket_path` explicitly
-2. **Environment variable**: `MANGO_SOCKET_PATH=/path/to/socket`
-3. **Default**:
-   - macOS: `~/.mango/mango.sock`
+1. **Config file** (`config.yaml`): `socket_path: /path/to/socket`
+2. **Platform default**:
+   - macOS / Windows: `$MANGO_DIR/mango.sock`
    - Linux: `/var/run/mango/mango.sock`
 
-Example with env var:
-```bash
-export MANGO_SOCKET_PATH=/tmp/mango.sock
-mango serve
+To use a custom path, set it in config:
+```yaml
+socket_path: /tmp/mango.sock
 ```
+
+---
+
+## HTTP / Browser Access
+
+To expose the gateway over TCP (required for browser clients and remote access), set `http_addr` in config:
+
+```yaml
+http_addr: ":8080"
+```
+
+When set, the gateway binds both the Unix socket (for the CLI) and a TCP listener simultaneously. CORS headers (`Access-Control-Allow-Origin: *`) are applied automatically to the TCP listener.
+
+### REST API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Health check → `{"ok":true}` |
+| `GET` | `/agents` | List agents with status and skills |
+| `POST` | `/agents/start` | Start a named agent |
+| `POST` | `/agents/stop` | Stop a named agent |
+| `GET` | `/tasks` | List all tasks |
+| `POST` | `/tasks` | Submit a task (async, returns 202 with task ID) |
+| `GET` | `/tasks/{id}` | Poll a task by ID |
+| `DELETE` | `/tasks/{id}` | Cancel a pending or running task |
+| `POST` | `/chat` | Submit a task and **block** until complete (sync) |
+| `GET` | `/events` | SSE stream of task and agent lifecycle events |
+
+### SSE Event Types (`GET /events`)
+
+```
+event: task.created   data: {id, goal, agent_name, session_id, status, created_at}
+event: task.updated   data: {id, status, result?, error?, updated_at}
+event: agent.started  data: {name}
+event: agent.stopped  data: {name}
+event: ping           data: {}  ← keepalive every 15s
+```
+
+### Task Status Values
+
+`pending` → `running` → `done` | `failed` | `cancelled`
+
+Cancel a running task: `DELETE /tasks/{id}` → `{"id":"...","status":"cancelled"}`
 
 ---
 
@@ -91,9 +152,9 @@ Agent system prompts are assembled at startup by combining agent definition file
 
 ### Agent Definition Files
 
-Each agent has a corresponding `.md` file (e.g., `ORCHESTRATOR.md`, `WORKER.md`, `researcher.md`) in the agents directory, configurable via `MANGO_AGENTS_DIR` (default: `/etc/mango/agents/`). For the default install:
-- Orchestrator: `/etc/mango/agents/ORCHESTRATOR.md`
-- Worker: `/etc/mango/agents/WORKER.md`
+Each agent has a corresponding `.md` file (e.g., `ORCHESTRATOR.md`, `WORKER.md`, `researcher.md`) in the agents directory (`$MANGO_DIR/agents/`). For the default install:
+- Orchestrator: `$MANGO_DIR/agents/ORCHESTRATOR.md`
+- Worker: `$MANGO_DIR/agents/WORKER.md`
 
 - **No hardcoded prompts.** At startup, `serve.go` reads each agent's definition file, trims it, appends any skills' definitions (in order), and sets `Agent.SystemPrompt`. Startup fails hard if the file is missing or empty — this is intentional: an agent with no persona should not silently run with stub behavior.
 - **Orchestrator definition** must encode the JSON schema contract (`action`, `tasks`, `final`) that `parseOrchestratorResponse` expects. The orchestrator explicitly requests JSON mode from the LLM provider when possible. The dynamic agent catalog (names + skills pulled from the live registry) is still appended by `orchestrator.agentCatalog()`; don't duplicate it in the .md file.
@@ -101,7 +162,7 @@ Each agent has a corresponding `.md` file (e.g., `ORCHESTRATOR.md`, `WORKER.md`,
 
 ### Skills
 
-Skills are reusable system prompt snippets stored as `.md` files in the skills directory, configurable via `MANGO_SKILLS_DIR` (default: `/etc/mango/skills/`). Skills are declared in the agent config and their definitions are automatically appended to the agent's system prompt at startup, in the order listed.
+Skills are reusable system prompt snippets stored as `.md` files in the skills directory (`$MANGO_DIR/skills/`). Skills are declared in the agent config and their definitions are automatically appended to the agent's system prompt at startup, in the order listed.
 
 Example skill definition:
 ```markdown
@@ -250,7 +311,6 @@ Calculates solar position and timing data (sunrise, sunset, solar noon) for any 
 Usage: Agents with access to this tool can calculate solar data directly without external APIs.
 
 ## Notable Gaps (Current State)
-- Token cap is hardcoded at 1024 per LLM call (`runner.go`)
 - Orchestrator fails hard if goal takes more than 5 orchestration steps
 - Anthropic prompt caching is not enabled — each Discord turn re-sends the full history uncached
-- Additional tools beyond GoSolarTool are not yet implemented
+- `http_addr` TCP listener has no authentication — anyone who can reach the port can control agents

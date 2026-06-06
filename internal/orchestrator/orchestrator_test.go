@@ -19,7 +19,7 @@ func TestOrchestratorRun_RetriesOnNonJSON(t *testing.T) {
 	}
 	reg := agent.NewRegistry()
 	orch := NewOrchestrator(a, reg)
-	d := NewDispatcher(reg, nil, orch)
+	d := NewDispatcher(reg, nil, orch, nil)
 
 	result, err := orch.Run(context.Background(), "hi", nil, d)
 	if err != nil {
@@ -43,7 +43,7 @@ func TestOrchestratorRun_ExceedsMaxStepsOnConstantNonJSON(t *testing.T) {
 	reg := agent.NewRegistry()
 	orch := NewOrchestrator(a, reg)
 	orch.MaxSteps = 3
-	d := NewDispatcher(reg, nil, orch)
+	d := NewDispatcher(reg, nil, orch, nil)
 
 	_, err := orch.Run(context.Background(), "hi", nil, d)
 	if err == nil {

@@ -130,10 +130,11 @@ func runServe(parent context.Context, cfg *Config, cfgPath string) error {
 	if orchestratorAgent != nil {
 		orch = orchestrator.NewOrchestrator(orchestratorAgent, registry)
 	}
-	dispatcher := orchestrator.NewDispatcher(registry, runners, orch)
+	bus := orchestrator.NewEventBus()
+	dispatcher := orchestrator.NewDispatcher(registry, runners, orch, bus)
 
 	// This is where the gateway starts
-	gw := gateway.NewServer(cfg.SocketPath, registry, runners, dispatcher)
+	gw := gateway.NewServer(cfg.SocketPath, cfg.HTTPAddr, registry, runners, dispatcher, bus)
 	if err := gw.Start(ctx); err != nil {
 		return err
 	}

@@ -7,6 +7,9 @@
 # All runtime files live under MANGO_DIR (default: ~/.mango).
 # Agent definitions: MANGO_DIR/agents/   Skill definitions: MANGO_DIR/skills/
 
+# Uncomment to expose the gateway over TCP for browser/remote clients.
+http_addr: ":9696"
+
 agents:
   - name: orchestrator
     role: orchestrator

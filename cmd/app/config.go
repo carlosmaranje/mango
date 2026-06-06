@@ -40,6 +40,7 @@ type DiscordConfig struct {
 
 type Config struct {
 	SocketPath string          `mapstructure:"socket_path" yaml:"socket_path,omitempty"`
+	HTTPAddr   string          `mapstructure:"http_addr" yaml:"http_addr,omitempty"`
 	Discord    DiscordConfig   `mapstructure:"discord" yaml:"discord,omitempty"`
 	Agents     []AgentConfig   `mapstructure:"agents" yaml:"agents,omitempty"`
 	Bindings   []BindingConfig `mapstructure:"bindings" yaml:"bindings,omitempty"`
@@ -76,6 +77,7 @@ func loadRawViper(path string) (*viper.Viper, error) {
 		v.SetConfigName("config")
 		v.SetConfigType("yaml")
 		v.AddConfigPath(constants.MangoDir())
+		v.AddConfigPath("/etc/" + constants.AppName) // system-wide fallback (e.g. installed via install.sh)
 		v.AddConfigPath("./config")
 		v.AddConfigPath(".")
 		if err := v.ReadInConfig(); err != nil {

@@ -57,20 +57,24 @@ type Dispatcher struct {
 	registry *agent.Registry
 	runners  map[string]*agent.Runner
 
-	mu    sync.RWMutex
-	tasks map[string]*Task
+	mu      sync.RWMutex
+	tasks   map[string]*Task
+	waiters map[string][]chan struct{}
 
 	orchestrator *Orchestrator
 	sessions     *sessionStore
+	bus          *EventBus
 }
 
-func NewDispatcher(reg *agent.Registry, runners map[string]*agent.Runner, orch *Orchestrator) *Dispatcher {
+func NewDispatcher(reg *agent.Registry, runners map[string]*agent.Runner, orch *Orchestrator, bus *EventBus) *Dispatcher {
 	return &Dispatcher{
 		registry:     reg,
 		runners:      runners,
 		tasks:        make(map[string]*Task),
+		waiters:      make(map[string][]chan struct{}),
 		orchestrator: orch,
 		sessions:     newSessionStore(),
+		bus:          bus,
 	}
 }
 
@@ -86,6 +90,7 @@ func (d *Dispatcher) Submit(ctx context.Context, goal, agentName, sessionID stri
 		d.sessions.append(sessionID, llm.Message{Role: "user", Content: goal})
 	}
 
+	taskCtx, cancel := context.WithCancel(ctx)
 	task := &Task{
 		ID:        newTaskID(),
 		Goal:      goal,
@@ -95,12 +100,18 @@ func (d *Dispatcher) Submit(ctx context.Context, goal, agentName, sessionID stri
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 		history:   history,
+		cancel:    cancel,
 	}
 	d.mu.Lock()
 	d.tasks[task.ID] = task
 	d.mu.Unlock()
 
-	go d.run(ctx, task)
+	if d.bus != nil {
+		taskCopy := *task
+		d.bus.Emit(Event{Type: "task.created", Payload: &taskCopy})
+	}
+
+	go d.run(taskCtx, task)
 	return task, nil
 }
 
@@ -125,9 +136,21 @@ func (d *Dispatcher) update(id string, fn func(*Task)) {
 }
 
 func (d *Dispatcher) run(ctx context.Context, task *Task) {
+	// If already cancelled before we start, go straight to finalize.
+	select {
+	case <-ctx.Done():
+		d.finalize(task.ID, "", ctx.Err())
+		return
+	default:
+	}
+
 	d.update(task.ID, func(t *Task) { t.Status = StatusRunning })
 
-	if task.AgentName == "" && d.orchestrator != nil {
+	if task.AgentName == "" {
+		if d.orchestrator == nil {
+			d.finalize(task.ID, "", fmt.Errorf("no agent specified and no orchestrator configured — check your config"))
+			return
+		}
 		result, err := d.orchestrator.Run(ctx, task.Goal, task.history, d)
 		d.finalize(task.ID, result, err)
 		return
@@ -139,19 +162,101 @@ func (d *Dispatcher) run(ctx context.Context, task *Task) {
 
 func (d *Dispatcher) finalize(id, result string, err error) {
 	var sessionID string
-	d.update(id, func(t *Task) {
-		sessionID = t.SessionID
-		if err != nil {
-			t.Status = StatusFailed
-			t.Error = err.Error()
-			return
+	var taskCopy Task
+	d.mu.Lock()
+	if t, ok := d.tasks[id]; ok {
+		if t.Status != StatusCancelled {
+			sessionID = t.SessionID
+			if err != nil {
+				t.Status = StatusFailed
+				t.Error = err.Error()
+			} else {
+				t.Status = StatusDone
+				t.Result = result
+			}
 		}
-		t.Status = StatusDone
-		t.Result = result
-	})
+		t.UpdatedAt = time.Now().UTC()
+		if t.cancel != nil {
+			t.cancel()
+		}
+		taskCopy = *t
+	}
+	waiters := d.waiters[id]
+	delete(d.waiters, id)
+	d.mu.Unlock()
+
+	for _, ch := range waiters {
+		close(ch)
+	}
+
+	if d.bus != nil {
+		d.bus.Emit(Event{Type: "task.updated", Payload: &taskCopy})
+	}
+
 	if err == nil && result != "" {
 		d.sessions.append(sessionID, llm.Message{Role: "assistant", Content: result})
 	}
+}
+
+// Wait blocks until the task with the given ID reaches a terminal state or ctx is done.
+func (d *Dispatcher) Wait(ctx context.Context, id string) (*Task, error) {
+	ch := make(chan struct{})
+
+	d.mu.Lock()
+	t, ok := d.tasks[id]
+	if !ok {
+		d.mu.Unlock()
+		return nil, fmt.Errorf("task not found")
+	}
+	switch t.Status {
+	case StatusDone, StatusFailed, StatusCancelled:
+		copy := *t
+		d.mu.Unlock()
+		return &copy, nil
+	}
+	d.waiters[id] = append(d.waiters[id], ch)
+	d.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-ch:
+		t, ok := d.Get(id)
+		if !ok {
+			return nil, fmt.Errorf("task not found")
+		}
+		return t, nil
+	}
+}
+
+// Cancel cancels a pending or running task by ID.
+func (d *Dispatcher) Cancel(id string) (*Task, error) {
+	d.mu.Lock()
+	t, ok := d.tasks[id]
+	if !ok {
+		d.mu.Unlock()
+		return nil, fmt.Errorf("task not found")
+	}
+	switch t.Status {
+	case StatusDone, StatusFailed, StatusCancelled:
+		d.mu.Unlock()
+		return nil, fmt.Errorf("task not running")
+	}
+	t.Status = StatusCancelled
+	t.UpdatedAt = time.Now().UTC()
+	cancel := t.cancel
+	taskCopy := *t
+	d.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+
+	if d.bus != nil {
+		d.bus.Emit(Event{Type: "task.updated", Payload: &taskCopy})
+	}
+
+	return &taskCopy, nil
 }
 
 func (d *Dispatcher) RunOnAgent(ctx context.Context, agentName, goal string, jsonResponse bool) (string, error) {

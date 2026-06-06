@@ -1,16 +1,18 @@
 package orchestrator
 
 import (
+	"context"
 	"time"
 
 	"github.com/carlosmaranje/mango/internal/llm"
 )
 
 const (
-	StatusPending = "pending"
-	StatusRunning = "running"
-	StatusDone    = "done"
-	StatusFailed  = "failed"
+	StatusPending   = "pending"
+	StatusRunning   = "running"
+	StatusDone      = "done"
+	StatusFailed    = "failed"
+	StatusCancelled = "cancelled"
 )
 
 type Task struct {
@@ -24,4 +26,5 @@ type Task struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	history   []llm.Message
+	cancel    context.CancelFunc
 }

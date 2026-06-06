@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -16,20 +17,32 @@ import (
 
 type Server struct {
 	socketPath string
+	httpAddr   string
 	registry   *agent.Registry
 	runners    map[string]*agent.Runner
 	dispatcher *orchestrator.Dispatcher
+	bus        *orchestrator.EventBus
 
 	httpSrv *http.Server
+	tcpSrv  *http.Server
 	ln      net.Listener
+	tcpLn   net.Listener
 }
 
-func NewServer(socketPath string, reg *agent.Registry, runners map[string]*agent.Runner, d *orchestrator.Dispatcher) *Server {
+func NewServer(
+	socketPath, httpAddr string,
+	reg *agent.Registry,
+	runners map[string]*agent.Runner,
+	d *orchestrator.Dispatcher,
+	bus *orchestrator.EventBus,
+) *Server {
 	return &Server{
 		socketPath: socketPath,
+		httpAddr:   httpAddr,
 		registry:   reg,
 		runners:    runners,
 		dispatcher: d,
+		bus:        bus,
 	}
 }
 
@@ -50,25 +63,61 @@ func (s *Server) Start(ctx context.Context) error {
 
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)
+
 	s.httpSrv = &http.Server{
 		Handler:      mux,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 60 * time.Second,
+		WriteTimeout: 0,
 	}
 
 	go func() {
-		if err := s.httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
+		if err := s.httpSrv.Serve(ln); err != nil && !errors.Is(http.ErrServerClosed, err) {
 			log.Printf("gateway: serve: %v", err)
 		}
 	}()
+
+	if s.httpAddr != "" {
+		tcpLn, err := net.Listen("tcp", s.httpAddr)
+		if err != nil {
+			return fmt.Errorf("listen tcp %s: %w", s.httpAddr, err)
+		}
+		s.tcpLn = tcpLn
+		s.tcpSrv = &http.Server{
+			Handler:      corsMiddleware(mux),
+			ReadTimeout:  15 * time.Second,
+			WriteTimeout: 0,
+		}
+		go func() {
+			if err := s.tcpSrv.Serve(tcpLn); err != nil && err != http.ErrServerClosed {
+				log.Printf("gateway: tcp serve: %v", err)
+			}
+		}()
+		log.Printf("gateway: also listening on http://%s", s.httpAddr)
+	}
 
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = s.httpSrv.Shutdown(shutdownCtx)
+		if s.tcpSrv != nil {
+			_ = s.tcpSrv.Shutdown(shutdownCtx)
+		}
 		_ = os.Remove(s.socketPath)
 	}()
 
 	return nil
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

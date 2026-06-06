@@ -39,8 +39,9 @@ func TestLoader_MissingSkillReturnsDescriptiveError(t *testing.T) {
 }
 
 func TestResolveSkillsDir_PrefersExplicit(t *testing.T) {
-	if got := ResolveSkillsDir(); got != "/explicit" {
-		t.Errorf("got %q, want /explicit", got)
+	t.Setenv("MANGO_DIR", "/explicit")
+	if got := ResolveSkillsDir(); got != "/explicit/skills" {
+		t.Errorf("got %q, want /explicit/skills", got)
 	}
 }
 
