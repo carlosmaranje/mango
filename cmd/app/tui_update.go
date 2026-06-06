@@ -293,6 +293,11 @@ func (m tuiModel) handleChatEnter() (tuiModel, []tea.Cmd) {
 }
 
 func (m tuiModel) handleChatSubmitted(dto taskDTO) (tuiModel, []tea.Cmd) {
+	// /chat is synchronous — the response is already complete.
+	if dto.Status == "done" || dto.Status == "failed" {
+		return m.handleChatUpdated(dto)
+	}
+	// Fallback: if somehow we get a pending task, poll for it.
 	return m, []tea.Cmd{pollChatMsg(m.client, m.ctx, dto.ID)}
 }
 

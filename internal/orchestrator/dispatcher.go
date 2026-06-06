@@ -302,6 +302,21 @@ func (d *Dispatcher) FanOut(ctx context.Context, steps []OrchestratedTask) []Ste
 	return results
 }
 
+// DefaultAgentName returns the name of the first non-orchestrator runner,
+// used as the default target for direct (chat) requests.
+func (d *Dispatcher) DefaultAgentName() string {
+	orchName := ""
+	if d.orchestrator != nil {
+		orchName = d.orchestrator.Agent.Name
+	}
+	for name := range d.runners {
+		if name != orchName {
+			return name
+		}
+	}
+	return orchName
+}
+
 func (d *Dispatcher) List() []*Task {
 	d.mu.RLock()
 	defer d.mu.RUnlock()

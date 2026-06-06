@@ -63,7 +63,7 @@ func submitChatMsg(c *gatewayClient, ctx context.Context, text, agentName string
 			body["agent"] = agentName
 		}
 		var out taskDTO
-		if err := c.request(ctx, "POST", "/tasks", body, &out); err != nil {
+		if err := c.request(ctx, "POST", "/chat", body, &out); err != nil {
 			return errMsg{err}
 		}
 		return chatSubmittedMsg(out)

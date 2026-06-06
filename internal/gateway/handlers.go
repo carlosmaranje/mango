@@ -191,7 +191,8 @@ func (s *Server) handleTaskByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleChat submits a task and blocks until it completes, returning the result synchronously.
+// handleChat submits a task directly to a worker agent (bypassing the orchestrator)
+// and blocks until complete, returning the result synchronously.
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -205,6 +206,11 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.Goal) == "" {
 		writeError(w, http.StatusBadRequest, "goal is required")
 		return
+	}
+	// Route directly to the first non-orchestrator agent so chat bypasses
+	// the orchestrator decomposition loop and goes straight to a tool-enabled worker.
+	if req.Agent == "" {
+		req.Agent = s.dispatcher.DefaultAgentName()
 	}
 	task, err := s.dispatcher.Submit(r.Context(), req.Goal, req.Agent, req.SessionID)
 	if err != nil {

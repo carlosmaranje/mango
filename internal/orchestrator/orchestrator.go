@@ -114,7 +114,7 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 		log.Printf("orchestrator: step %d — fanout complete: %s", step, stepResultsStr)
 		messages = append(messages,
 			llm.Message{Role: "assistant", Content: raw},
-			llm.Message{Role: "user", Content: stepResultsStr},
+			llm.Message{Role: "user", Content: stepResultsStr + "\n\nUsing the above results, respond with {\"action\":\"finish\",\"tasks\":[],\"final\":\"<your answer>\"}. Do not dispatch more tasks unless the results are insufficient."},
 		)
 	}
 
