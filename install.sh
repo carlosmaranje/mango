@@ -47,9 +47,19 @@ echo "  5. Copy config to ~/.mango/ (resolved from the mango system user's home)
 echo ""
 echo "You will be prompted for your sudo password."
 echo ""
-read -p "Continue? (y/n) " -n 1 -r </dev/tty
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+
+# confirm <prompt> [default: y|n]
+# Returns 0 (true) for yes, 1 (false) for no.
+# Pressing Enter alone accepts the default.
+confirm() {
+	local prompt="$1" default="${2:-n}" reply
+	IFS= read -r -p "$prompt" reply </dev/tty
+	reply=$(echo "$reply" | tr '[:upper:]' '[:lower:]' | xargs)
+	[ -z "$reply" ] && reply="$default"
+	[[ "$reply" == "y" || "$reply" == "yes" ]]
+}
+
+if ! confirm "Continue? (y/n) " n; then
 	echo "Aborted."
 	exit 1
 fi
@@ -93,9 +103,7 @@ echo "Setting up configuration..."
 sudo -u mango mkdir -p "$MANGO_DIR/agents" "$MANGO_DIR/skills"
 if [ -f "$MANGO_DIR/config.yaml" ]; then
 	echo "  $MANGO_DIR/config.yaml already exists"
-	read -p "  Replace with default config? (y/N) " -n 1 -r </dev/tty
-	echo
-	if [[ $REPLY =~ ^[Yy]$ ]]; then
+	if confirm "  Replace with default config? (y/N) " n; then
 		if [ -f config/config.default.yaml ]; then
 			sudo -u mango cp config/config.default.yaml "$MANGO_DIR/config.yaml"
 			echo "  Installed default config with orchestrator + worker agents"
@@ -119,9 +127,7 @@ for agent in ORCHESTRATOR WORKER; do
 		target="$MANGO_DIR/agents/${agent}.md"
 		if [ -f "$target" ]; then
 			echo "  $target already exists"
-			read -p "    Replace? (y/N) " -n 1 -r </dev/tty
-			echo
-			if [[ $REPLY =~ ^[Yy]$ ]]; then
+			if confirm "    Replace? (y/N) " n; then
 				sudo -u mango cp "$agent_file" "$target"
 				echo "    Updated $agent.md"
 			fi
@@ -139,16 +145,14 @@ sudo chown mango:mango /usr/local/bin/mango
 # Optional interactive Discord setup
 DISCORD_CONFIGURED=0
 echo ""
-read -p "Configure Discord bot now? (y/N) " -n 1 -r </dev/tty
-echo
-if [[ $REPLY =~ ^[Yy]$ ]] && sudo -u mango test -f "$MANGO_DIR/config.yaml"; then
+if confirm "Configure Discord bot now? (y/N) " n && sudo -u mango test -f "$MANGO_DIR/config.yaml"; then
 	read -p "  Discord bot token: " discord_token </dev/tty
 	if [ -n "$discord_token" ]; then
 		echo "  Bind the bot to:"
 		echo "    [g] all channels (global)"
 		echo "    [c] a specific list of channel IDs"
-		read -p "  Choose [g/c]: " -n 1 -r bind_mode </dev/tty
-		echo
+		IFS= read -r -p "  Choose [g/c]: " bind_mode </dev/tty
+		bind_mode=$(echo "$bind_mode" | tr '[:upper:]' '[:lower:]' | xargs)
 
 		discord_global="false"
 		channels_csv=""
@@ -223,10 +227,8 @@ configure_agent() {
 }
 
 echo ""
-read -p "Configure LLM providers now? (y/N) " -n 1 -r </dev/tty
-echo
 CONFIGURED=0
-if [[ $REPLY =~ ^[Yy]$ ]]; then
+if confirm "Configure LLM providers now? (y/N) " n; then
 	configure_agent orchestrator
 	configure_agent worker
 	CONFIGURED=1
