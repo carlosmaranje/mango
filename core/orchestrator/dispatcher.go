@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/carlosmaranje/mango/core/agent"
+	"github.com/carlosmaranje/mango/core/event"
 	"github.com/carlosmaranje/mango/core/llm"
 )
 
@@ -63,10 +64,10 @@ type Dispatcher struct {
 
 	orchestrator *Orchestrator
 	sessions     *sessionStore
-	bus          *EventBus
+	bus          *event.Bus
 }
 
-func NewDispatcher(reg *agent.Registry, runners map[string]*agent.Runner, orch *Orchestrator, bus *EventBus) *Dispatcher {
+func NewDispatcher(reg *agent.Registry, runners map[string]*agent.Runner, orch *Orchestrator, bus *event.Bus) *Dispatcher {
 	return &Dispatcher{
 		registry:     reg,
 		runners:      runners,
@@ -124,7 +125,7 @@ func (d *Dispatcher) Submit(ctx context.Context, req TaskRequest) (*Task, error)
 
 	if d.bus != nil {
 		busCopy := snapshot
-		d.bus.Emit(Event{Type: "task.created", Payload: &busCopy})
+		d.bus.Emit(event.Event{Type: event.TypeTaskCreated, Payload: &busCopy})
 	}
 
 	// run mutates the stored task under the lock; hand the caller an immutable
@@ -208,7 +209,7 @@ func (d *Dispatcher) finalize(id, result string, err error) {
 	}
 
 	if d.bus != nil {
-		d.bus.Emit(Event{Type: "task.updated", Payload: &taskCopy})
+		d.bus.Emit(event.Event{Type: event.TypeTaskUpdated, Payload: &taskCopy})
 	}
 
 	if err == nil && result != "" {
@@ -271,7 +272,7 @@ func (d *Dispatcher) Cancel(id string) (*Task, error) {
 	}
 
 	if d.bus != nil {
-		d.bus.Emit(Event{Type: "task.updated", Payload: &taskCopy})
+		d.bus.Emit(event.Event{Type: event.TypeTaskUpdated, Payload: &taskCopy})
 	}
 
 	return &taskCopy, nil

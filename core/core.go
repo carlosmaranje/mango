@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"github.com/carlosmaranje/mango/core/agent"
+	"github.com/carlosmaranje/mango/core/event"
 	"github.com/carlosmaranje/mango/core/llm"
 	"github.com/carlosmaranje/mango/core/memory"
 	"github.com/carlosmaranje/mango/core/orchestrator"
 	"github.com/carlosmaranje/mango/core/tools"
+	"github.com/carlosmaranje/mango/core/tools/scratchpad"
 )
 
 // AgentSpec declaratively describes one agent for the engine to materialize.
@@ -42,6 +44,12 @@ type AgentSpec struct {
 	// Tools are extra tools available only to this agent, layered on top of the
 	// engine's shared tools.
 	Tools []tools.Tool
+	// Limits bounds this agent's tool loop (steps, tokens, deadline, no-progress,
+	// per-tool retry). Zero values are filled with generous defaults.
+	Limits agent.Limits
+	// EnableScratchpad registers the durable scratchpad tool for this agent when a
+	// memory store is available. Overrides Options.EnableScratchpad when true.
+	EnableScratchpad bool
 }
 
 const orchestratorRole = "orchestrator"
@@ -56,6 +64,13 @@ type Options struct {
 	MaxSteps int
 	// RunnerInterval is the agent heartbeat interval (0 => runner default).
 	RunnerInterval time.Duration
+	// EnableScratchpad registers the durable scratchpad tool for every agent that
+	// has a memory store. Per-agent AgentSpec.EnableScratchpad can also opt in.
+	EnableScratchpad bool
+	// EmitStepEvents attaches the event bus to agent runners so step-/tool-level
+	// events flow to Subscribe. Default off: the stream then carries only the
+	// historical task.*/agent.* events (preserving existing consumers byte-for-byte).
+	EmitStepEvents bool
 }
 
 // Engine is the embeddable mango-core orchestrator. It owns the agent registry,
@@ -64,15 +79,17 @@ type Options struct {
 type Engine struct {
 	mu sync.Mutex
 
-	specs       []AgentSpec
-	specNames   map[string]struct{}
-	sharedTools *tools.Registry
-	maxSteps    int
-	interval    time.Duration
+	specs            []AgentSpec
+	specNames        map[string]struct{}
+	sharedTools      *tools.Registry
+	maxSteps         int
+	interval         time.Duration
+	enableScratchpad bool
+	emitStepEvents   bool
 
 	registry   *agent.Registry
 	runners    map[string]*agent.Runner
-	bus        *orchestrator.EventBus
+	bus        *event.Bus
 	orch       *orchestrator.Orchestrator
 	dispatcher *orchestrator.Dispatcher
 	closers    []func() error
@@ -83,13 +100,15 @@ type Engine struct {
 // Start is called. Additional tools/agents may be registered before Start.
 func New(opts Options) (*Engine, error) {
 	e := &Engine{
-		specNames:   make(map[string]struct{}),
-		sharedTools: tools.NewRegistry(),
-		maxSteps:    opts.MaxSteps,
-		interval:    opts.RunnerInterval,
-		registry:    agent.NewRegistry(),
-		runners:     make(map[string]*agent.Runner),
-		bus:         orchestrator.NewEventBus(),
+		specNames:        make(map[string]struct{}),
+		sharedTools:      tools.NewRegistry(),
+		maxSteps:         opts.MaxSteps,
+		interval:         opts.RunnerInterval,
+		enableScratchpad: opts.EnableScratchpad,
+		emitStepEvents:   opts.EmitStepEvents,
+		registry:         agent.NewRegistry(),
+		runners:          make(map[string]*agent.Runner),
+		bus:              event.NewBus(),
 	}
 	for _, t := range opts.Tools {
 		if err := e.RegisterTool(t); err != nil {
@@ -200,6 +219,7 @@ func (e *Engine) buildAgent(spec AgentSpec) (*agent.Agent, *agent.Runner, error)
 		Memory:       mem,
 		AuthCreds:    spec.AuthCreds,
 		MaxTokens:    spec.MaxTokens,
+		Limits:       spec.Limits,
 	}
 
 	toolReg := e.sharedTools.Clone()
@@ -208,7 +228,17 @@ func (e *Engine) buildAgent(spec AgentSpec) (*agent.Agent, *agent.Runner, error)
 			return nil, nil, fmt.Errorf("agent %q: register tool: %w", spec.Name, err)
 		}
 	}
-	return a, agent.NewRunner(a, toolReg, e.interval), nil
+	if mem != nil && (e.enableScratchpad || spec.EnableScratchpad) {
+		if err := toolReg.Register(scratchpad.New(mem, spec.Name)); err != nil {
+			return nil, nil, fmt.Errorf("agent %q: register scratchpad: %w", spec.Name, err)
+		}
+	}
+
+	runner := agent.NewRunner(a, toolReg, e.interval)
+	if e.emitStepEvents {
+		runner.SetBus(e.bus)
+	}
+	return a, runner, nil
 }
 
 // Stop stops all runners and releases per-agent resources (e.g. memory stores).
@@ -344,7 +374,7 @@ func (e *Engine) StartAgent(ctx context.Context, name string) error {
 	if err := r.Start(ctx); err != nil {
 		return err
 	}
-	e.bus.Emit(orchestrator.Event{Type: string(EventAgentStarted), Payload: map[string]string{"name": name}})
+	e.bus.Emit(event.Event{Type: event.TypeAgentStarted, Payload: map[string]string{"name": name}})
 	return nil
 }
 
@@ -355,7 +385,7 @@ func (e *Engine) StopAgent(name string) error {
 		return fmt.Errorf("agent %q not found", name)
 	}
 	r.Stop()
-	e.bus.Emit(orchestrator.Event{Type: string(EventAgentStopped), Payload: map[string]string{"name": name}})
+	e.bus.Emit(event.Event{Type: event.TypeAgentStopped, Payload: map[string]string{"name": name}})
 	return nil
 }
 

@@ -25,6 +25,7 @@ package core
 import (
 	"time"
 
+	"github.com/carlosmaranje/mango/core/event"
 	"github.com/carlosmaranje/mango/core/llm"
 	"github.com/carlosmaranje/mango/core/orchestrator"
 )
@@ -95,14 +96,34 @@ const (
 	EventTaskUpdated  EventType = "task.updated"
 	EventAgentStarted EventType = "agent.started"
 	EventAgentStopped EventType = "agent.stopped"
+
+	// Step-/tool-level events. Emitted only when a host opts in via
+	// Options.EmitStepEvents; otherwise the stream carries only the four above.
+	EventStepStarted       EventType = "step.started"
+	EventStepCompleted     EventType = "step.completed"
+	EventToolCalled        EventType = "tool.called"
+	EventToolCompleted     EventType = "tool.completed"
+	EventInvocationStopped EventType = "invocation.stopped"
 )
 
 // Event is the streaming OUTPUT contract. Task is populated for task.* events;
-// Agent is populated for agent.* events.
+// Agent for agent.* events; Step for step.*/tool.*/invocation.stopped events.
 type Event struct {
-	Type  EventType `json:"type"`
-	Task  *Result   `json:"task,omitempty"`
-	Agent string    `json:"agent,omitempty"`
+	Type  EventType  `json:"type"`
+	Task  *Result    `json:"task,omitempty"`
+	Agent string     `json:"agent,omitempty"`
+	Step  *StepEvent `json:"step,omitempty"`
+}
+
+// StepEvent carries the detail of a step-, tool-, or invocation-level event.
+type StepEvent struct {
+	AgentName  string `json:"agent_name,omitempty"`
+	TaskID     string `json:"task_id,omitempty"`
+	Step       int    `json:"step,omitempty"`
+	Tool       string `json:"tool,omitempty"`
+	Attempt    int    `json:"attempt,omitempty"`
+	StopReason string `json:"stop_reason,omitempty"`
+	Error      string `json:"error,omitempty"`
 }
 
 // AgentInfo describes a registered agent and its current run state.
@@ -130,14 +151,18 @@ func taskToResult(t *orchestrator.Task) *Result {
 	}
 }
 
-// translateEvent maps an internal orchestrator.Event onto the public Event.
-func translateEvent(ev orchestrator.Event) Event {
+// translateEvent maps an internal event.Event onto the public Event.
+func translateEvent(ev event.Event) Event {
 	out := Event{Type: EventType(ev.Type)}
 	switch p := ev.Payload.(type) {
 	case *orchestrator.Task:
 		out.Task = taskToResult(p)
 	case map[string]string:
 		out.Agent = p["name"]
+	case event.StepInfo:
+		out.Step = &StepEvent{AgentName: p.AgentName, TaskID: p.TaskID, Step: p.Step, StopReason: p.StopReason}
+	case event.ToolInfo:
+		out.Step = &StepEvent{AgentName: p.AgentName, TaskID: p.TaskID, Step: p.Step, Tool: p.Tool, Attempt: p.Attempt, Error: p.Err}
 	}
 	return out
 }

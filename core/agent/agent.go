@@ -18,6 +18,7 @@ type Agent struct {
 	Memory       memory.Store
 	AuthCreds    map[string]string
 	MaxTokens    int
+	Limits       Limits
 }
 
 func (a *Agent) EffectiveMaxTokens() int {
