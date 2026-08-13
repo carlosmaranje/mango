@@ -48,23 +48,25 @@ The repo is split into two Go modules:
 | Package | Role |
 |---|---|
 | `core` | Embeddable facade: `Engine`, `Request`, `Result`, `Event`, `Options`, `AgentSpec` |
-| `core/agent` | Agent struct, Registry, Runner goroutine loop (LLM + tool loop) |
-| `core/orchestrator` | Task, Dispatcher, ReAct-style Orchestrator, EventBus |
+| `core/agent` | Agent registry and runner, including the LLM/tool loop and invocation limits |
+| `core/orchestrator` | In-memory tasks/sessions, dispatcher, fan-out, and ReAct-style orchestrator |
+| `core/event` | Non-blocking event bus and task/agent/step/tool event vocabulary |
 | `core/llm` | LLM interface + Anthropic/OpenAI/Ollama clients |
 | `core/memory` | SQLite key-value store per agent (`Store` interface) |
-| `core/tools` | Tool interface + registry (ships **no** concrete tools) |
+| `core/tools` | Tool interface, registry, definitions, and retry/timeout execution policy |
+| `core/tools/scratchpad` | Optional durable scratchpad over an agent's memory store |
 
 ### `mango` App Packages (`internal/`, `cmd/`)
 
 | Package | Role |
 |---|---|
-| `cmd/app` | CLI entry point, Cobra commands, Unix socket HTTP client; builds the `core.Engine` |
-| `internal/gateway` | Unix socket / HTTP server + route handlers (maps HTTP ⇄ `core.Engine`) |
-| `internal/discord` | Discord bot + channel router (drives `core.Engine`) |
+| `cmd/app` | Cobra CLI, Bubble Tea TUI, config commands, Unix-socket client, and engine assembly |
+| `internal/gateway` | Unix/TCP HTTP server and REST/SSE adapters over `core.Engine` |
+| `internal/discord` | Discord bot and channel router over `core.Engine` |
 | `internal/agentdef` | Loads agent `.md` personas + composes system prompts from skills (MANGO_DIR) |
 | `internal/skill` | Skill definition loader (MANGO_DIR/skills) |
 | `internal/constants` | `MANGO_DIR` path resolution |
-| `internal/tools` | Concrete built-in tools (GoSolarTool, DateTimeTool, IdentityTool) plugged into core |
+| `internal/tools` | Application tools: `gosolar`, `datetime`, and per-agent `identity` |
 
 ---
 
@@ -93,10 +95,11 @@ All runtime files live under a single root called `MANGO_DIR`.
 
 1. **Explicit flag**: `--config /path/to/config.yaml`
 2. **`$MANGO_DIR/config.yaml`** (MANGO_DIR defaults to `~/.mango`)
-3. **`./config/config.yaml`**
-4. **`./config.yaml`**
+3. **`/etc/mango/config.yaml`** (system-wide fallback)
+4. **`./config/config.yaml`**
+5. **`./config.yaml`**
 
-When no config file is found the CLI writes new config to `$MANGO_DIR/config.yaml`.
+When no config file is found, reads use defaults and future config-writing commands target `$MANGO_DIR/config.yaml`.
 
 ---
 
@@ -118,13 +121,15 @@ socket_path: /tmp/mango.sock
 
 ## HTTP / Browser Access
 
-To expose the gateway over TCP (required for browser clients and remote access), set `http_addr` in config:
+Set `http_addr` to expose the gateway over TCP (required for browser clients and remote access):
 
 ```yaml
-http_addr: ":8080"
+http_addr: "127.0.0.1:9696"
 ```
 
-When set, the gateway binds both the Unix socket (for the CLI) and a TCP listener simultaneously. CORS headers (`Access-Control-Allow-Origin: *`) are applied automatically to the TCP listener.
+When set, the gateway binds both the Unix socket and a TCP listener. The shipped `config/config.default.yaml` currently sets `http_addr: ":9696"`, which listens on all interfaces. Set it to `""` to disable TCP.
+
+**Security:** the TCP API has no authentication or authorization and applies `Access-Control-Allow-Origin: *`. Anyone who can reach it can submit/cancel tasks and start/stop agents. Keep it disabled, bind it to loopback, or place it behind a trusted authenticated reverse proxy; never expose it directly to an untrusted network.
 
 ### REST API Endpoints
 
@@ -148,8 +153,10 @@ event: task.created   data: {id, goal, agent_name, session_id, status, created_a
 event: task.updated   data: {id, status, result?, error?, updated_at}
 event: agent.started  data: {name}
 event: agent.stopped  data: {name}
-event: ping           data: {}  ← keepalive every 15s
+event: ping           data: {}  ← sent immediately and then every 15s
 ```
+
+`mango-core` can also emit `step.started`, `step.completed`, `tool.called`, `tool.completed`, and `invocation.stopped` when `Options.EmitStepEvents` is enabled. The Mango host does not currently enable these events, and the gateway's SSE serializer does not expose their detail payload yet.
 
 ### Task Status Values
 
@@ -262,18 +269,28 @@ This boots the full pipeline:
 - Starts the Unix socket HTTP gateway
 - Starts the Discord bot (if token configured)
 
-### 3. Check Health
+### 3. Open the TUI
+
+With the gateway running in another process, launch the interactive UI with no subcommand:
+
+```bash
+mango
+```
+
+Chat is the default panel. Chat uses synchronous `POST /chat`; Tasks uses asynchronous `POST /tasks`; Agents shows live runner status; Config lists common management commands. Both Chat and Tasks currently use the shared in-memory session ID `tui`.
+
+### 4. Check Health
 ```bash
 mango status
 # → gateway: ok (socket=/Users/.../.mango/mango.sock)
 ```
 
-### 4. List Agents
+### 5. List Agents
 ```bash
 mango agent list
 ```
 
-### 5. Submit a Task (CLI)
+### 6. Submit a Task (CLI)
 ```bash
 # Route to a specific agent:
 mango task submit "Summarize Go 1.24 release notes" --agent researcher
@@ -285,15 +302,15 @@ mango task submit "Research and summarize Go 1.24 features"
 mango task submit "..." --wait
 ```
 
-### 6. Check Task Status
+### 7. Check Task Status
 ```bash
 mango task status <task-id>
 ```
 
-### 7. Discord (optional)
+### 8. Discord (optional)
 With `discord.token` set and channel bindings configured, users can message the bot in Discord. Messages in bound channels go directly to the named agent; unbound channels route through the orchestrator.
 
-While the model is thinking the bot keeps a typing indicator active (refreshed every 8s). Per-channel conversation history (last 100 messages, `internal/discord/context.go`) is injected into the LLM call for both the direct-agent and orchestrator paths, so follow-up messages preserve context.
+While the model is thinking, the bot refreshes Discord's typing indicator every eight seconds. The Discord channel ID becomes the core `SessionID`, so both direct-agent and orchestrator follow-ups use the dispatcher's latest 200 in-memory messages. This history is lost on restart. `internal/discord/context.go` remains in the tree but is not used by the live bot path.
 
 ---
 
@@ -302,13 +319,16 @@ While the model is thinking the bot keeps a typing indicator active (refreshed e
 ```
 mango task submit "goal"
   └─► POST /tasks  (HTTP over Unix socket)
-        └─► dispatcher.Submit(goal, agentName)          # or SubmitWithHistory from Discord
-              ├─ agentName set   → RunOnAgentWithHistory → runner.executeTask → LLM.Complete
-              └─ agentName ""   → orchestrator.Run(goal, history, d) (ReAct loop, max 5 steps)
+        └─► core.Engine.Submit(core.Request)
+              └─► dispatcher.Submit(TaskRequest)
+                    ├─ Agent set → RunOnAgentWithHistory → runner tool loop → LLM.Complete
+                    └─ Agent ""  → orchestrator.Run(goal, history, d) (ReAct loop, max 5 rounds)
                     └─► dispatcher.FanOut (parallel agent goroutines)
                           └─► each runner → LLM → result
                     └─► orchestrator LLM synthesizes final answer
 ```
+
+`POST /chat` fills an empty agent with `Engine.DefaultAgent()` and then calls `SubmitAndWait`, so chat bypasses orchestration unless the request explicitly names the orchestrator. With multiple non-orchestrator agents, callers should name one because the current default depends on map iteration order.
 
 ---
 
@@ -324,17 +344,22 @@ mango task submit "goal"
 
 ---
 
-## Built-in Tools
+## Built-in Tools and Core Capabilities
 
-### GoSolarTool
-Calculates solar position and timing data (sunrise, sunset, solar noon) for any location. Useful for time-based scheduling, solar event alerts, or environmental monitoring.
+- **`gosolar`** (shared): calculates solar position, angles, sunrise, sunset, solar noon, and related orbital data.
+- **`datetime`** (shared): resolves current/local time and calendar information for a date and IANA timezone.
+- **`identity`** (per agent): reports the running agent, host, OS/architecture, work directory, socket/config paths, and uptime.
+- **`scratchpad`** (core, opt-in): durable namespaced `get`/`set`/`list`/`delete` operations over `memory.Store`. The Mango host does not currently enable it.
 
-**Input**: Latitude, longitude, date, timezone
-**Output**: Sunrise time, sunset time, solar noon, solar position (elevation, azimuth)
+The runner supports up to 12 tool-loop steps by default, context windowing, no-progress detection, optional invocation deadlines/token budgets, optional tool timeouts/retries, and opt-in step/tool events. Mango's YAML does not yet expose `agent.Limits`, `EnableScratchpad`, or `EmitStepEvents`, so the host uses one tool attempt, no scratchpad, and coarse events.
 
-Usage: Agents with access to this tool can calculate solar data directly without external APIs.
+SQLite provides per-agent key-value storage. Task records and conversation sessions remain in memory and are not restored after restart.
 
 ## Notable Gaps (Current State)
-- Orchestrator fails hard if goal takes more than 5 orchestration steps
-- Anthropic prompt caching is not enabled — each Discord turn re-sends the full history uncached
-- `http_addr` TCP listener has no authentication — anyone who can reach the port can control agents
+- Orchestrator fails hard if a goal takes more than five orchestration rounds.
+- Anthropic prompt caching is not enabled; each turn re-sends retained history uncached.
+- The default starter config exposes unauthenticated, wildcard-CORS TCP on `:9696`.
+- Tasks and session history are process-local rather than persisted.
+- Direct chat's implicit worker selection is nondeterministic when several workers exist.
+- Core invocation limits, retry policy, scratchpad, and detailed events are not configurable from Mango YAML yet.
+- Tests are strongest in `core`; `cmd/app`, `internal/gateway`, the live Discord bot flow, and host tools have little or no direct coverage.

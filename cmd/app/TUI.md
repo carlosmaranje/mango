@@ -35,15 +35,17 @@ func runTUI(cfg *Config) error {
 `tea.NewProgram` takes over the terminal (alt screen = no scroll-back pollution).
 `newTUIModel` builds the initial state:
 
-| Field        | What it is                                                                        |
-|--------------|-----------------------------------------------------------------------------------|
-| `client`     | HTTP-over-Unix-socket client pointed at the gateway                               |
-| `spinner`    | Charmbracelet spinner, styled orange, used while tasks run                        |
-| `input`      | Main text input — goal entry                                                      |
-| `agentInput` | Secondary input — optional `--agent` override                                     |
-| `resultVP`   | Scrollable viewport for task results (not yet wired to a trigger in current code) |
-| `section`    | Which panel is active: Tasks / Agents / Config                                    |
-| `gatewayMsg` | Socket path string shown in the status bar                                        |
+| Field | What it is |
+|---|---|
+| `client` | HTTP-over-Unix-socket client pointed at the gateway |
+| `spinner` | Charmbracelet spinner, styled orange, used while a task or chat request runs |
+| `input` | Asynchronous Tasks-panel goal input |
+| `chatInput` | Synchronous Chat-panel message input; focused on startup |
+| `agentInput` | Optional agent override shared by Chat and Tasks |
+| `chatMessages` / `chatVP` | Current TUI chat transcript and its scrollable viewport |
+| `resultVP` | Task-result overlay viewport; the overlay has no opening trigger yet |
+| `section` | Active panel: Chat / Tasks / Agents / Config; Chat is the default |
+| `gatewayMsg` | Socket path string shown in the status bar |
 
 The model is a plain Go struct passed **by value**. Every state change in `Update` returns a new
 copy — this is the core BubbleTea contract.
@@ -119,6 +121,14 @@ A poll result arrived. The handler updates the matching task's `status`, `result
 If the status is `done` or `failed` it sets `pollingDone = true` and stops polling; otherwise it
 fires another `pollTask2`. After updating, it recalculates `m.loading` by scanning all tasks.
 
+### chatSubmittedMsg / chatUpdatedMsg
+
+The Chat panel uses synchronous `POST /chat`. A terminal response is appended directly to
+`chatMessages`; a non-terminal response falls back to `pollChatMsg`. While the request is in
+flight, `chatLoading` prevents another submission and drives the thinking indicator. Both Chat
+and Tasks send the hard-coded session ID `tui`, so their turns share one in-memory gateway
+conversation until the server restarts.
+
 ### spinner.TickMsg / tickMsg
 `spinner.TickMsg` advances the spinner animation frame.  
 `tickMsg` fires every 5 seconds: re-checks health and, if the gateway is up, reloads agents.
@@ -139,13 +149,14 @@ View()
        viewStatusBar()              ← gateway status + socket path + key hints
 ```
 
-`viewContent()` routes to one of three panels based on `m.section`:
+`viewContent()` routes to one of four panels based on `m.section`:
 
-| Section | Panel               | Contents                                                                                 |
-|---------|---------------------|------------------------------------------------------------------------------------------|
-| Tasks   | `viewTasks`         | ASCII logo → goal input → optional agent input → recent task list (last 8, newest first) |
-| Agents  | `viewAgents`        | Live table of agent name / status / skills                                               |
-| Config  | `viewConfigSection` | Reference list of `mango config` CLI commands                                            |
+| Section | Panel | Contents |
+|---|---|---|
+| Chat | `viewChat` | Selected-agent label, scrollable local transcript, thinking indicator, and message input |
+| Tasks | `viewTasks` | ASCII logo, goal input, optional agent input, and the latest eight tasks |
+| Agents | `viewAgents` | Live table of agent name, runner status, and skills |
+| Config | `viewConfigSection` | Reference list of common `mango config` and `mango add` commands |
 
 ---
 
@@ -173,6 +184,27 @@ View renders the task row:
   (result preview shown inline when pollingDone)
 ```
 
+The task list exists only in the current TUI model. It is not initialized from `GET /tasks`,
+so restarting the TUI starts with an empty list even while the gateway still holds older tasks.
+
+### Chat lifecycle
+
+```
+User types a message, presses Enter
+  └─ handleChatEnter()
+       ├─ appends the user message to chatMessages
+       └─ fires submitChatMsg → POST /chat with session_id="tui"
+
+chatSubmittedMsg arrives after the synchronous gateway call completes
+  └─ appends result/error as an agent message
+  └─ refreshes the chat viewport and scrolls to the bottom
+```
+
+If no explicit agent is selected, `/chat` bypasses orchestration and asks the engine for a
+default non-orchestrator agent. The current label `orchestrator (auto)` is therefore misleading.
+When more than one worker exists, select an agent with `ctrl+a` because the default is not
+deterministic.
+
 ---
 
 ## 8. Gateway communication
@@ -180,12 +212,14 @@ View renders the task row:
 All API calls go through `gatewayClient`, which wraps `net/http` with a Unix-socket dialer.
 There is no TCP involved — every request dials the socket path directly.
 
-| Command       | Method + Path    | Purpose                             |
-|---------------|------------------|-------------------------------------|
-| `checkHealth` | `GET /health`    | Liveness check                      |
-| `loadAgents`  | `GET /agents`    | Fetch agent list                    |
-| `submitTask`  | `POST /tasks`    | Submit goal (+ optional agent name) |
-| `pollTask2`   | `GET /tasks/:id` | Fetch task status / result          |
+| Command | Method + Path | Purpose |
+|---|---|---|
+| `checkHealth` | `GET /health` | Liveness check |
+| `loadAgents` | `GET /agents` | Fetch agent list |
+| `submitTask` | `POST /tasks` | Submit an asynchronous goal with `session_id="tui"` |
+| `pollTask2` | `GET /tasks/:id` | Fetch asynchronous task status/result after 1.5 seconds |
+| `submitChatMsg` | `POST /chat` | Submit and wait synchronously with `session_id="tui"` |
+| `pollChatMsg` | `GET /tasks/:id` | Fallback polling if `/chat` ever returns a non-terminal response |
 
 If the gateway is not running, `request()` wraps the dial error into a human-readable message
 (`"gateway not running at … — start with mango serve"`).
@@ -194,12 +228,13 @@ If the gateway is not running, `request()` wraps the dial error into a human-rea
 
 ## 9. Key bindings summary
 
-| Key                 | Action                                         |
-|---------------------|------------------------------------------------|
-| `tab` / `shift+tab` | Cycle sections (Tasks → Agents → Config → …)   |
-| `enter`             | Submit task (Tasks) or reload agents (Agents)  |
-| `ctrl+a`            | Toggle the agent-name input below the goal box |
-| `esc`               | Dismiss agent input / close overlays           |
-| `r`                 | Refresh agents                                 |
-| `?`                 | Show keyboard shortcut help                    |
-| `q` / `ctrl+c`      | Clear input if non-empty, otherwise quit       |
+| Key | Action |
+|---|---|
+| `tab` / `shift+tab` | Cycle Chat → Tasks → Agents → Config (or reverse) |
+| `enter` | Send chat, submit task, confirm agent selection, or reload agents depending on focus |
+| `ctrl+a` | Toggle the agent-name input in Chat or Tasks |
+| `up` / `down` / `pgup` / `pgdown` | Scroll the Chat transcript |
+| `esc` | Dismiss agent input or close the task-result overlay |
+| `r` | Refresh agents while the Agents section is active |
+| `shift+?` | Show keyboard shortcut help; any key closes it |
+| `q` / `ctrl+c` | Clear a non-empty Tasks input; otherwise quit |

@@ -62,18 +62,33 @@ A live lifecycle stream, obtained from `Engine.Subscribe()`:
 
 ```go
 type Event struct {
-    Type  EventType // task.created | task.updated | agent.started | agent.stopped
+    Type  EventType
     Task  *Result   // populated for task.* events
     Agent string    // populated for agent.* events
+    Step  *StepEvent // populated for step.*, tool.*, and invocation.stopped
 }
 ```
+
+Every engine emits the compatibility lifecycle events `task.created`,
+`task.updated`, `agent.started`, and `agent.stopped`. Set
+`Options.EmitStepEvents` to also receive `step.started`, `step.completed`,
+`tool.called`, `tool.completed`, and `invocation.stopped`. `StepEvent` identifies
+the agent, task, step, tool attempt, stop reason, and any tool error relevant to
+the event.
+
+Event delivery is best effort. Each subscriber has a bounded buffer, and the
+engine drops events for a subscriber that cannot keep up rather than blocking
+agent execution.
 
 ---
 
 ## The Engine API
 
 ```go
-eng, err := core.New(core.Options{ /* Tools, Agents, MaxSteps, RunnerInterval */ })
+eng, err := core.New(core.Options{
+    /* Tools, Agents, MaxSteps, RunnerInterval,
+       EnableScratchpad, EmitStepEvents */
+})
 
 eng.RegisterTool(t)              // add a shared tool        (before Start)
 eng.AddAgent(spec)               // add an agent             (before Start)
@@ -87,7 +102,7 @@ eng.List()                       // all tasks
 
 eng.Agents()                     // []AgentInfo (name, status, skills)
 eng.StartAgent(ctx, name) / eng.StopAgent(name)
-eng.DefaultAgent()               // first non-orchestrator agent
+eng.DefaultAgent()               // a non-orchestrator agent; supply a name when deterministic routing matters
 
 unsub, events := eng.Subscribe() // <-chan Event; call unsub() to stop
 
@@ -143,7 +158,7 @@ func main() {
 
 | You plug in | Interface | Notes |
 |---|---|---|
-| **Agents** | `core.AgentSpec` | Fully composed `SystemPrompt` — core does **not** read persona/skill files. |
+| **Agents** | `core.AgentSpec` | Fully composed `SystemPrompt`; optional role, skills, tools, memory, credentials, limits, and scratchpad. Core does **not** read persona/skill files. |
 | **Tools** | `core/tools.Tool` | `Name/Description/Parameters/Returns/Execute`. Shared via `Options.Tools` or per-agent via `AgentSpec.Tools`. |
 | **LLM clients** | `core/llm.Client` | One method: `Complete(ctx, CompletionRequest)`. Anthropic/OpenAI/Ollama included. |
 | **Memory** | `core/memory.Store` | Optional per-agent KV store; a SQLite implementation is provided. |
@@ -161,6 +176,53 @@ func (Upper) Execute(ctx context.Context, input string) (string, error) { /* ...
 eng.RegisterTool(Upper{}) // before Start; available to every agent
 ```
 
+### Agent loop limits and tool execution policy
+
+Each `AgentSpec` may provide `agent.Limits` to bound one invocation:
+
+```go
+Limits: agent.Limits{
+    MaxSteps:      8,
+    MaxTokens:     80_000,          // cumulative estimate; 0 disables this limit
+    Deadline:      2 * time.Minute,
+    NoProgressN:   2,
+    ContextBudget: 60_000,
+    ToolPolicy: tools.ExecPolicy{
+        MaxAttempts: 3,
+        Backoff:     500 * time.Millisecond,
+        Timeout:     15 * time.Second,
+    },
+},
+```
+
+The zero value uses 12 tool-loop steps, a 100,000-token-equivalent context
+window, a no-progress threshold of two repeated actions, no overall deadline or
+cumulative token limit, and one tool attempt. Context/token accounting is a
+rough `len/4` estimate rather than provider-reported usage. Tool retries apply
+to every returned error; there is currently no error classification or
+idempotency policy.
+
+When the loop stops, `invocation.stopped` reports one of `completed`,
+`max_steps`, `token_budget`, `deadline`, `no_progress`, or `context_canceled` if
+detailed events are enabled.
+
+### Durable scratchpad
+
+The one concrete tool included with core is the opt-in `scratchpad`, which
+exposes `get`, `set`, `list`, and `delete` operations over an agent's
+`memory.Store`. Enable it globally with `Options.EnableScratchpad` or per agent
+with `AgentSpec.EnableScratchpad`. It is registered only when that agent has a
+memory store. Scratchpad keys are namespaced per agent and persist when the
+backing store persists.
+
+### Runtime state
+
+Task records and `SessionID` conversation histories live in the dispatcher and
+are not persisted. A session retains its latest 200 user/assistant messages for
+the lifetime of the engine. `Request.History`, when non-nil, overrides the
+stored history for that request. The optional memory store is agent key-value
+storage; it does not automatically persist tasks or transcripts.
+
 See [`engine_test.go`](./engine_test.go) for runnable, dependency-free examples
 of the direct-agent path, the full tool-call loop, the orchestrator path, and
 the event stream.
@@ -173,9 +235,11 @@ the event stream.
 |---|---|
 | `core` | The embeddable facade: `Engine`, `Request`, `Result`, `Event`, `Options`, `AgentSpec`. |
 | `core/agent` | `Agent`, `Registry`, `Runner` (the per-agent LLM + tool loop). |
-| `core/orchestrator` | `Dispatcher`, `Orchestrator` (ReAct decomposition), `EventBus`, `Task`. |
+| `core/orchestrator` | `Dispatcher`, in-memory task/session state, and the ReAct-style `Orchestrator`. |
+| `core/event` | Shared non-blocking event bus and internal event vocabulary. |
 | `core/llm` | `Client` interface + Anthropic / OpenAI / Ollama clients. |
-| `core/tools` | `Tool` interface + `Registry`. Ships **no** concrete tools. |
+| `core/tools` | `Tool` interface, registry, definitions, and execution policies. |
+| `core/tools/scratchpad` | Opt-in durable key-value tool over `memory.Store`. |
 | `core/memory` | `Store` interface + SQLite implementation. |
 
 `core/*` never imports the host (`mango`) packages — the module boundary

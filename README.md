@@ -13,7 +13,7 @@
 > It's also a tropical fruit.
 > Mostly, though, it naps.
 
-**Mango** is a multi-agent orchestration gateway that brings the power of agentic AI to Discord and your terminal. Define specialized agents with different capabilities and LLM backends; a central orchestrator decomposes goals into parallel sub-tasks and fans them out while the cat sleeps.
+**Mango** is a multi-agent orchestration gateway that brings agentic AI to Discord and your terminal. Define specialized agents with different capabilities and LLM backends; a central orchestrator decomposes goals into parallel sub-tasks and fans them out while the cat sleeps. The reusable engine lives in the separate [`mango-core`](core/) Go module, while the root module provides the TUI, CLI, gateway, Discord integration, configuration, and application-specific tools.
 
 ## ✨ Features
 
@@ -21,11 +21,11 @@
 - **Provider Agnostic**: Built-in support for **Anthropic**, **OpenAI**, and local models via **Ollama**.
 - **Flexible Agent Personalities**: Define agent behaviors via markdown files (agent definitions) and reusable skills.
 - **Discord Integration**: Interact with specific agents or the whole system through Discord channels. See [DISCORD_SETUP.md](DISCORD_SETUP.md) for a detailed guide.
-- **CLI Control Plane**: A powerful command-line interface to manage the gateway, check status, and dispatch tasks.
-- **Built-in Tools**: Agents can access tools like GoSolarTool for calculations without external APIs.
-- **Persistent Memory**: SQLite-backed key-value store for agents to maintain state across sessions.
+- **Terminal UI + CLI Control Plane**: Chat interactively or manage the gateway, agents, configuration, and tasks from scripts.
+- **Built-in Tools**: Agents receive solar, date/time, and instance-identity tools; embedders can opt agents into a durable scratchpad.
+- **Agent Storage**: SQLite-backed key-value storage is available per agent. Task records and conversation sessions are currently process-local and do not survive a restart.
 - **Unix Socket Gateway**: Efficient local communication between the CLI and the background server.
-- **REST / Browser API**: Optional TCP listener with CORS and Server-Sent Events for real-time task updates.
+- **REST / Browser API**: The gateway can also listen on TCP, with CORS and Server-Sent Events for real-time task updates.
 
 ## Getting Started
 
@@ -93,8 +93,9 @@ Mango searches for config in this order:
 
 1. `--config /path/to/config.yaml` (CLI flag)
 2. `$MANGO_DIR/config.yaml`
-3. `./config/config.yaml`
-4. `./config.yaml`
+3. `/etc/mango/config.yaml`
+4. `./config/config.yaml`
+5. `./config.yaml`
 
 Use the CLI to manage your configuration:
 
@@ -188,6 +189,8 @@ To start the Discord bot and the orchestration server:
 ./mango serve
 ```
 
+Running `./mango` with no subcommand opens the interactive TUI. Its default Chat panel sends synchronous requests to the gateway; the other panels show asynchronous tasks, live agent status, and configuration command references. The TUI communicates over the Unix socket even when TCP access is enabled.
+
 ### Using the CLI
 
 You can interact with the running gateway from another terminal:
@@ -199,7 +202,11 @@ You can interact with the running gateway from another terminal:
 
 - **Submit a Task**:
   ```bash
-  ./mango task "Research the latest trends in Go 1.24 and summarize them."
+  # Route through the orchestrator and return the task ID immediately
+  ./mango task submit "Research the latest trends in Go 1.24 and summarize them."
+
+  # Route directly to an agent and wait for the answer
+  ./mango task submit "Summarize Go 1.24" --agent researcher --wait
   ```
 
 - **Manage Agents**:
@@ -209,13 +216,15 @@ You can interact with the running gateway from another terminal:
 
 ## REST API & Browser Access
 
-Add `http_addr` to your config to expose the gateway over TCP:
+Set `http_addr` to expose the gateway over TCP:
 
 ```yaml
-http_addr: ":8080"
+http_addr: "127.0.0.1:9696"
 ```
 
-The gateway binds both the Unix socket (for the CLI) and the TCP port simultaneously. CORS headers are set automatically so browser clients can connect directly.
+The gateway binds both the Unix socket and the TCP address simultaneously. The shipped `config/config.default.yaml` currently enables `http_addr: ":9696"`, which listens on all interfaces. Set it to an empty string to disable TCP.
+
+> **Security warning:** the TCP API has no authentication or authorization, and its CORS policy allows every origin. Anyone who can reach the listener can submit or cancel tasks and start or stop agents. Keep it disabled, bind it to loopback as above, or protect it with a trusted authenticated reverse proxy. Do not expose it directly to an untrusted network.
 
 | Method | Path | Description |
 |---|---|---|
@@ -227,16 +236,16 @@ The gateway binds both the Unix socket (for the CLI) and the TCP port simultaneo
 | `POST` | `/tasks` | Submit a task (async, 202) |
 | `GET` | `/tasks/{id}` | Poll task status |
 | `DELETE` | `/tasks/{id}` | Cancel a task |
-| `POST` | `/chat` | Submit and wait for result (sync) |
+| `POST` | `/chat` | Submit and wait for result (sync; defaults to a non-orchestrator agent) |
 | `GET` | `/events` | SSE stream of real-time events |
 
-The `/events` endpoint streams `task.created`, `task.updated`, `agent.started`, `agent.stopped`, and `ping` (keepalive every 15s) events as Server-Sent Events. Connect once with the browser's `EventSource` API — no polling required.
+Requests may include `session_id`; history is retained in memory under that key, up to 200 messages, until the process restarts. The `/events` endpoint streams `task.created`, `task.updated`, `agent.started`, `agent.stopped`, and `ping` (keepalive every 15s) events as Server-Sent Events. Connect once with the browser's `EventSource` API—no polling required. `mango-core` also supports opt-in step/tool events, but the Mango host does not currently enable or expose their payloads.
 
 ## 🛠️ Built-in Tools
 
-Mango includes built-in tools that agents can access:
+Mango registers `gosolar` and `datetime` for every configured agent, plus a separate `identity` instance for each agent.
 
-### GoSolarTool
+### `gosolar`
 Calculates solar position and timing data (sunrise, sunset, solar noon) for any location.
 
 **Inputs:**
@@ -252,6 +261,26 @@ Calculates solar position and timing data (sunrise, sunset, solar noon) for any 
 - Solar position (elevation and azimuth angles)
 
 Example use cases: Solar event alerts, time-based scheduling, environmental monitoring.
+
+### `datetime`
+
+Returns the current time or calendar details for a requested date and IANA timezone, including weekday, ISO week, day-of-year, distance from today, next weekday offsets, and time-of-day information.
+
+### `identity`
+
+Returns runtime information for the current agent: agent name, host, OS/architecture, working directory, socket and config paths, start time, and uptime.
+
+### Core scratchpad
+
+`mango-core` ships an opt-in `scratchpad` tool backed by an agent's memory store. It supports `get`, `set`, `list`, and `delete` operations for durable intermediate state. The Mango host currently creates SQLite stores but does not enable this tool in `serve.go`.
+
+## Current Limitations
+
+- Orchestration is capped at five rounds and fails if the orchestrator does not finish in that budget.
+- Tool-loop limits, retries, detailed step events, and scratchpad support exist in `mango-core` but are not configurable through the Mango YAML yet. The host therefore uses one tool attempt and coarse task/agent events by default.
+- `/chat` chooses the first non-orchestrator agent when no agent is supplied; with several workers, map iteration makes that default nondeterministic. Supply `agent` explicitly when the target matters.
+- Task records and session history are in memory only. SQLite is currently agent key-value storage, not task or transcript persistence.
+- Anthropic prompt caching is not enabled, so retained conversation history is sent again on each turn.
 
 ## 📦 Deployment
 

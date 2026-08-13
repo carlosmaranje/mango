@@ -7,7 +7,10 @@
 # All runtime files live under MANGO_DIR (default: ~/.mango).
 # Agent definitions: MANGO_DIR/agents/   Skill definitions: MANGO_DIR/skills/
 
-# Uncomment to expose the gateway over TCP for browser/remote clients.
+# TCP access is enabled for browser/remote clients by default.
+# WARNING: this API has no authentication and allows every CORS origin. Bind to
+# 127.0.0.1, protect it with an authenticated proxy, or set http_addr: "" before
+# using Mango on an untrusted network.
 http_addr: ":9696"
 
 agents:

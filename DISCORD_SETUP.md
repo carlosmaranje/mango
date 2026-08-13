@@ -56,6 +56,15 @@ If you want the bot to listen and respond to **every message in every channel** 
 ```
 *Note: This can be noisy in large servers, so use it with caution.*
 
+### Routing and Conversation History
+
+- A bound channel routes directly to its configured agent.
+- DMs, mentions in unbound channels, and unbound messages accepted by global mode route through the orchestrator.
+- The Discord channel ID is used as Mango's `session_id`, so follow-up messages in the same channel share context on both routing paths.
+- Session history is held by the core dispatcher, retains the latest 200 user/assistant messages, and is lost when Mango restarts. The older `internal/discord/context.go` buffer is not part of the live bot path.
+
+While a task is running, Mango refreshes Discord's typing indicator every eight seconds. A task is polled for up to five minutes before the reply loop gives up.
+
 ## 4. Invite the Bot to your Server
 
 1.  Go to the **"OAuth2"** tab in the Developer Portal, then select **"URL Generator"**.

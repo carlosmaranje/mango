@@ -6,6 +6,11 @@
 # Each agent's system prompt is assembled at startup by reading its .md then
 # appending every skill .md listed under `skills:` (separated by "\n\n---\n\n").
 
+# Optional TCP listener for browsers or remote clients. The TCP API has no
+# authentication and allows every CORS origin, so bind to loopback or protect it
+# with an authenticated reverse proxy. Omit this key or set it to "" to disable.
+http_addr: "127.0.0.1:9696"
+
 discord:
   token: "${DISCORD_TOKEN}"
 
