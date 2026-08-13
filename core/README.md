@@ -36,7 +36,9 @@ type Request struct {
 
 `Goal` is the only required field. Leave `Agent` empty to route through the
 orchestrator (the agent registered with `Role: "orchestrator"`); set it to
-dispatch straight to that named agent.
+dispatch straight to that named agent. The host supplies that agent's persona
+and strategy, while core automatically appends the required JSON response
+protocol and the live agent catalog.
 
 ### Output — `core.Result`
 
@@ -158,7 +160,7 @@ func main() {
 
 | You plug in | Interface | Notes |
 |---|---|---|
-| **Agents** | `core.AgentSpec` | Fully composed `SystemPrompt`; optional role, skills, tools, memory, credentials, limits, and scratchpad. Core does **not** read persona/skill files. |
+| **Agents** | `core.AgentSpec` | Host-composed `SystemPrompt`; optional role, skills, tools, memory, credentials, limits, and scratchpad. Core does **not** read persona/skill files. For the orchestrator role, core appends its response protocol automatically. |
 | **Tools** | `core/tools.Tool` | `Name/Description/Parameters/Returns/Execute`. Shared via `Options.Tools` or per-agent via `AgentSpec.Tools`. |
 | **LLM clients** | `core/llm.Client` | One method: `Complete(ctx, CompletionRequest)`. Anthropic/OpenAI/Ollama included. |
 | **Memory** | `core/memory.Store` | Optional per-agent KV store; a SQLite implementation is provided. |
@@ -175,6 +177,25 @@ func (Upper) Execute(ctx context.Context, input string) (string, error) { /* ...
 
 eng.RegisterTool(Upper{}) // before Start; available to every agent
 ```
+
+### Orchestrator contract
+
+To enable orchestration, register an agent with `Role: "orchestrator"` and give
+it the persona and delegation strategy you want:
+
+```go
+core.AgentSpec{
+    Name:         "orchestrator",
+    Role:         "orchestrator",
+    SystemPrompt: "You decompose complex goals and preserve detail when synthesizing results.",
+    LLM:          client,
+}
+```
+
+The host does not need to describe the internal `action` / `tasks` / `final`
+JSON format. Core appends `orchestrator.ProtocolPrompt` and the current agent
+catalog to the supplied prompt on every orchestration run. The exported prompt
+is informational; hosts should not append it themselves.
 
 ### Agent loop limits and tool execution policy
 

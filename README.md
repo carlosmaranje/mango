@@ -123,12 +123,11 @@ When given a goal, analyze it to determine:
 1. Whether it can be solved in one step or requires multiple sub-tasks
 2. Which agents are best suited for each sub-task
 3. How to combine their results into a final answer
-
-## Response Format
-
-You MUST respond ONLY with a valid JSON object:
-...
 ```
+
+Mango core automatically appends the machine-readable orchestration protocol
+and live agent catalog. The definition file only needs to describe the agent's
+persona and delegation strategy.
 
 **Skills** are reusable system prompt snippets stored as `.md` files in the skills directory (default: `/etc/mango/skills/`). List skills in your agent config and they are automatically appended to the agent's system prompt at startup:
 

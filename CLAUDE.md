@@ -179,7 +179,7 @@ Skipping either step prints an `ACTION REQUIRED` block with the file path to edi
 
 ## Agent Personalities & Skills — Definition Files
 
-Agent system prompts are assembled at startup by combining agent definition files with skill definitions.
+Host-defined agent prompts are assembled at startup by combining agent definition files with skill definitions. Core adds its orchestration protocol at invocation time.
 
 ### Agent Definition Files
 
@@ -187,8 +187,8 @@ Each agent has a corresponding `.md` file (e.g., `ORCHESTRATOR.md`, `WORKER.md`,
 - Orchestrator: `$MANGO_DIR/agents/ORCHESTRATOR.md`
 - Worker: `$MANGO_DIR/agents/WORKER.md`
 
-- **No hardcoded prompts.** At startup, `serve.go` reads each agent's definition file, trims it, appends any skills' definitions (in order), and sets `Agent.SystemPrompt`. Startup fails hard if the file is missing or empty — this is intentional: an agent with no persona should not silently run with stub behavior.
-- **Orchestrator definition** must encode the JSON schema contract (`action`, `tasks`, `final`) that `parseOrchestratorResponse` expects. The orchestrator explicitly requests JSON mode from the LLM provider when possible. The dynamic agent catalog (names + skills pulled from the live registry) is still appended by `orchestrator.agentCatalog()`; don't duplicate it in the .md file.
+- **No hardcoded personas.** At startup, `serve.go` reads each agent's definition file, trims it, appends any skills' definitions (in order), and sets `Agent.SystemPrompt`. Startup fails hard if the file is missing or empty — this is intentional: an agent with no persona should not silently run with stub behavior.
+- **Orchestrator definition** contains only its host-defined persona and delegation strategy. `mango-core` automatically appends `orchestrator.ProtocolPrompt`, which owns the `action` / `tasks` / `final` JSON contract expected by `parseOrchestratorResponse`, followed by the live agent catalog. The orchestrator also requests JSON mode from the LLM provider when possible. Don't duplicate the protocol or catalog in the `.md` file.
 - **Worker / custom agents** can contain any persona, tone, tool-use guidelines, etc. Edit the agent definition file, then `sudo systemctl restart mango` to reload.
 
 ### Skills

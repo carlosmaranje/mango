@@ -13,6 +13,38 @@ import (
 
 const DefaultMaxSteps = 5
 
+// ProtocolPrompt is the response contract used by mango-core's orchestrator.
+// It is appended automatically to the host-supplied orchestrator persona, so
+// embedding applications do not need to duplicate this schema in their own
+// prompt files. The parser and retry guidance below must remain aligned with
+// this contract.
+const ProtocolPrompt = `# Mango orchestration protocol
+
+This protocol is owned and supplied by mango-core. It takes precedence over any conflicting response-format instructions above.
+
+Respond with exactly one valid JSON object. Do not include markdown fences, a preamble, or trailing commentary. The object must have exactly these keys:
+
+{
+  "action": "continue",
+  "tasks": [
+    {
+      "agent": "<agent name from the available-agent catalog>",
+      "goal": "<clear, self-contained sub-task>",
+      "json": false
+    }
+  ],
+  "final": ""
+}
+
+The only valid actions are "continue" and "finish".
+
+- Use "continue" when work must be delegated. Include at least one task and leave "final" empty.
+- Use "finish" when answering the user. Set "tasks" to [] and put the complete, user-facing answer in "final".
+- A task's "agent" must exactly match a name in the available-agent catalog.
+- A task's "goal" must be non-empty and contain enough context for that agent to work independently.
+- A task's "json" is optional and defaults to false. Set it to true only when the delegated result must be a JSON object.
+- Handle greetings, acknowledgements, and other requests that need no delegated work with "finish".`
+
 type OrchestratedTask struct {
 	Agent string `json:"agent"`
 	Goal  string `json:"goal"`
@@ -54,9 +86,7 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 		maxSteps = DefaultMaxSteps
 	}
 
-	messages := []llm.Message{
-		{Role: "system", Content: p.Agent.SystemPrompt + "\n\n" + p.agentCatalog()},
-	}
+	messages := []llm.Message{{Role: "system", Content: p.systemPrompt()}}
 	messages = append(messages, history...)
 	messages = append(messages, llm.Message{Role: "user", Content: "Goal: " + goal})
 
@@ -119,6 +149,14 @@ func (p *Orchestrator) Run(ctx context.Context, goal string, history []llm.Messa
 	}
 
 	return "", fmt.Errorf("orchestrator exceeded max steps (%d)", maxSteps)
+}
+
+func (p *Orchestrator) systemPrompt() string {
+	parts := []string{strings.TrimSpace(p.Agent.SystemPrompt), ProtocolPrompt}
+	if catalog := strings.TrimSpace(p.agentCatalog()); catalog != "" {
+		parts = append(parts, catalog)
+	}
+	return strings.Join(parts, "\n\n---\n\n")
 }
 
 func (p *Orchestrator) agentCatalog() string {

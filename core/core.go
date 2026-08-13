@@ -17,14 +17,16 @@ import (
 
 // AgentSpec declaratively describes one agent for the engine to materialize.
 //
-// The system prompt is supplied fully composed: mango-core does not read
-// persona/skill files. Hosts assemble personas however they like and pass the
-// final string here. An empty SystemPrompt is rejected — an agent with no
-// persona must never silently run with stub behavior.
+// The host portion of the system prompt is supplied fully composed: mango-core
+// does not read persona/skill files. Hosts assemble personas however they like
+// and pass the result here. For an orchestrator, core automatically appends its
+// response protocol and live agent catalog. An empty SystemPrompt is rejected
+// — an agent with no persona must never silently run with stub behavior.
 type AgentSpec struct {
 	// Name uniquely identifies the agent within the engine.
 	Name string
-	// SystemPrompt is the fully composed system prompt. Required.
+	// SystemPrompt is the host-composed persona and instructions. Required. Core
+	// appends the orchestration protocol when Role is "orchestrator".
 	SystemPrompt string
 	// LLM is the chat client backing this agent. Required.
 	LLM llm.Client
