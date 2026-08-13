@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/carlosmaranje/mango/internal/agent"
-	"github.com/carlosmaranje/mango/internal/llm"
+	"github.com/carlosmaranje/mango/core/agent"
+	"github.com/carlosmaranje/mango/core/llm"
 )
 
 const defaultSessionSize = 200
@@ -84,35 +84,53 @@ func newTaskID() string {
 	return hex.EncodeToString(b[:])
 }
 
-func (d *Dispatcher) Submit(ctx context.Context, goal, agentName, sessionID string) (*Task, error) {
-	history := d.sessions.get(sessionID)
-	if sessionID != "" {
-		d.sessions.append(sessionID, llm.Message{Role: "user", Content: goal})
+// TaskRequest is the dispatcher-level input for submitting a task. History
+// overrides the session-derived history when non-nil; JSON requests a JSON
+// response on the direct-agent path.
+type TaskRequest struct {
+	Goal      string
+	AgentName string
+	SessionID string
+	History   []llm.Message
+	JSON      bool
+}
+
+func (d *Dispatcher) Submit(ctx context.Context, req TaskRequest) (*Task, error) {
+	history := req.History
+	if history == nil {
+		history = d.sessions.get(req.SessionID)
+	}
+	if req.SessionID != "" {
+		d.sessions.append(req.SessionID, llm.Message{Role: "user", Content: req.Goal})
 	}
 
 	taskCtx, cancel := context.WithCancel(ctx)
 	task := &Task{
 		ID:        newTaskID(),
-		Goal:      goal,
-		AgentName: agentName,
-		SessionID: sessionID,
+		Goal:      req.Goal,
+		AgentName: req.AgentName,
+		SessionID: req.SessionID,
 		Status:    StatusPending,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 		history:   history,
+		json:      req.JSON,
 		cancel:    cancel,
 	}
 	d.mu.Lock()
 	d.tasks[task.ID] = task
+	snapshot := *task
 	d.mu.Unlock()
 
 	if d.bus != nil {
-		taskCopy := *task
-		d.bus.Emit(Event{Type: "task.created", Payload: &taskCopy})
+		busCopy := snapshot
+		d.bus.Emit(Event{Type: "task.created", Payload: &busCopy})
 	}
 
+	// run mutates the stored task under the lock; hand the caller an immutable
+	// snapshot so reads don't race with the goroutine below.
 	go d.run(taskCtx, task)
-	return task, nil
+	return &snapshot, nil
 }
 
 func (d *Dispatcher) Get(id string) (*Task, bool) {
@@ -156,7 +174,7 @@ func (d *Dispatcher) run(ctx context.Context, task *Task) {
 		return
 	}
 
-	result, err := d.RunOnAgentWithHistory(ctx, task.AgentName, task.Goal, task.history, false)
+	result, err := d.RunOnAgentWithHistory(ctx, task.AgentName, task.Goal, task.history, task.json)
 	d.finalize(task.ID, result, err)
 }
 

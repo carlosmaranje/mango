@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/carlosmaranje/mango/internal/llm"
+	"github.com/carlosmaranje/mango/core/llm"
 )
 
 type Registry struct {

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/carlosmaranje/mango/internal/llm"
+	"github.com/carlosmaranje/mango/core/llm"
 )
 
 type captureLLM struct {

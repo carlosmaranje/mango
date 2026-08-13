@@ -3,8 +3,8 @@ package agent
 import (
 	"slices"
 
-	"github.com/carlosmaranje/mango/internal/llm"
-	"github.com/carlosmaranje/mango/internal/memory"
+	"github.com/carlosmaranje/mango/core/llm"
+	"github.com/carlosmaranje/mango/core/memory"
 )
 
 const DefaultMaxTokens = 4096

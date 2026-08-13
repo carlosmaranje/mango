@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/carlosmaranje/mango/internal/agent"
+	"github.com/carlosmaranje/mango/core/agent"
 )
 
 func TestOrchestratorRun_RetriesOnNonJSON(t *testing.T) {

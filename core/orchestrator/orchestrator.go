@@ -7,8 +7,8 @@ import (
 	"log"
 	"strings"
 
-	"github.com/carlosmaranje/mango/internal/agent"
-	"github.com/carlosmaranje/mango/internal/llm"
+	"github.com/carlosmaranje/mango/core/agent"
+	"github.com/carlosmaranje/mango/core/llm"
 )
 
 const DefaultMaxSteps = 5

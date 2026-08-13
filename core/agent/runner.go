@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/carlosmaranje/mango/internal/llm"
-	"github.com/carlosmaranje/mango/internal/tools"
+	"github.com/carlosmaranje/mango/core/llm"
+	"github.com/carlosmaranje/mango/core/tools"
 )
 
 type TaskEnvelope struct {

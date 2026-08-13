@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/carlosmaranje/mango/internal/llm"
+	"github.com/carlosmaranje/mango/core/llm"
 )
 
 const (
@@ -26,5 +26,6 @@ type Task struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	history   []llm.Message
+	json      bool
 	cancel    context.CancelFunc
 }
