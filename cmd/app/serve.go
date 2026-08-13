@@ -10,12 +10,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/carlosmaranje/mango/internal/agent"
+	"github.com/carlosmaranje/mango/core"
+	"github.com/carlosmaranje/mango/core/llm"
+	coretools "github.com/carlosmaranje/mango/core/tools"
+	"github.com/carlosmaranje/mango/internal/agentdef"
 	"github.com/carlosmaranje/mango/internal/discord"
 	"github.com/carlosmaranje/mango/internal/gateway"
-	"github.com/carlosmaranje/mango/internal/llm"
-	"github.com/carlosmaranje/mango/internal/memory"
-	"github.com/carlosmaranje/mango/internal/orchestrator"
 	"github.com/carlosmaranje/mango/internal/skill"
 	"github.com/carlosmaranje/mango/internal/tools"
 )
@@ -38,7 +38,7 @@ func runServe(parent context.Context, cfg *Config, cfgPath string) error {
 	ctx, cancel := signal.NotifyContext(parent, shutdownSignals...)
 	defer cancel()
 
-	agentsDir := agent.ResolveAgentsDir()
+	agentsDir := agentdef.ResolveAgentsDir()
 	skillsDir := skill.ResolveSkillsDir()
 	socketDir := filepath.Dir(cfg.SocketPath)
 
@@ -50,19 +50,13 @@ func runServe(parent context.Context, cfg *Config, cfgPath string) error {
 
 	skillLoader := skill.NewLoader(skillsDir)
 
-	registry := agent.NewRegistry()
-	runners := map[string]*agent.Runner{}
-	closers := []func() error{}
-	toolReg := tools.NewRegistry()
-
-	if err := toolReg.Register(tools.NewGoSolarTool()); err != nil {
-		return fmt.Errorf("failed to register gosolar tool: %w", err)
+	// mango plugs its concrete, app-specific tools into the reusable core engine.
+	opts := core.Options{
+		Tools: []coretools.Tool{
+			tools.NewGoSolarTool(),
+			tools.NewDateTimeTool(),
+		},
 	}
-	if err := toolReg.Register(tools.NewDateTimeTool()); err != nil {
-		return fmt.Errorf("failed to register datetime tool: %w", err)
-	}
-
-	var orchestratorAgent *agent.Agent
 
 	for _, ac := range cfg.Agents {
 		if ac.LLM.Provider == "" {
@@ -80,61 +74,43 @@ func runServe(parent context.Context, cfg *Config, cfgPath string) error {
 			return fmt.Errorf("agent %q: %w", ac.Name, err)
 		}
 
-		workDir := filepath.Join(agent.ResolveAgentsDir(), ac.Name)
-		mem, err := memory.Open(workDir)
-		if err != nil {
-			return fmt.Errorf("agent %q memory: %w", ac.Name, err)
-		}
-		closers = append(closers, mem.Close)
-
-		systemPrompt, err := agent.ComposeSystemPrompt(agentsDir, ac.Name, ac.Skills, skillLoader)
+		systemPrompt, err := agentdef.ComposeSystemPrompt(agentsDir, ac.Name, ac.Skills, skillLoader)
 		if err != nil {
 			return fmt.Errorf("agent %q: %w", ac.Name, err)
 		}
 		if len(ac.Skills) > 0 {
-			log.Printf("agent %q: loaded skills %v from %s", ac.Name, ac.Skills, skill.ResolveSkillsDir())
+			log.Printf("agent %q: loaded skills %v from %s", ac.Name, ac.Skills, skillsDir)
 		}
 
-		a := &agent.Agent{
+		opts.Agents = append(opts.Agents, core.AgentSpec{
 			Name:         ac.Name,
-			WorkDir:      workDir,
+			Role:         ac.Role,
+			SystemPrompt: systemPrompt,
 			LLM:          llmClient,
 			Skills:       ac.Skills,
-			SystemPrompt: systemPrompt,
-			Memory:       mem,
-			AuthCreds:    ac.AuthCreds,
 			MaxTokens:    ac.MaxTokens,
-		}
-		if err := registry.Register(a); err != nil {
-			return err
-		}
-		agentToolReg := toolReg.Clone()
-		if err := agentToolReg.Register(tools.NewIdentityTool(ac.Name, cfg.SocketPath, cfgPath)); err != nil {
-			return fmt.Errorf("agent %q: register identity tool: %w", ac.Name, err)
-		}
-		runner := agent.NewRunner(a, agentToolReg, 0)
-		runners[a.Name] = runner
-		if err := runner.Start(ctx); err != nil {
-			return err
-		}
-		if ac.Role == "orchestrator" {
-			orchestratorAgent = a
-		}
+			AuthCreds:    ac.AuthCreds,
+			WorkDir:      filepath.Join(agentsDir, ac.Name),
+			Tools: []coretools.Tool{
+				tools.NewIdentityTool(ac.Name, cfg.SocketPath, cfgPath),
+			},
+		})
 	}
 
-	if len(runners) == 0 {
+	if len(opts.Agents) == 0 {
 		log.Printf("warn: no agents configured — tasks will fail. Run 'mango agent create' or edit configuration.")
 	}
 
-	var orch *orchestrator.Orchestrator
-	if orchestratorAgent != nil {
-		orch = orchestrator.NewOrchestrator(orchestratorAgent, registry)
+	engine, err := core.New(opts)
+	if err != nil {
+		return err
 	}
-	bus := orchestrator.NewEventBus()
-	dispatcher := orchestrator.NewDispatcher(registry, runners, orch, bus)
+	if err := engine.Start(ctx); err != nil {
+		return err
+	}
 
 	// This is where the gateway starts
-	gw := gateway.NewServer(cfg.SocketPath, cfg.HTTPAddr, registry, runners, dispatcher, bus)
+	gw := gateway.NewServer(cfg.SocketPath, cfg.HTTPAddr, engine)
 	if err := gw.Start(ctx); err != nil {
 		return err
 	}
@@ -146,7 +122,7 @@ func runServe(parent context.Context, cfg *Config, cfgPath string) error {
 			bindings = append(bindings, discord.ChannelBinding{ChannelID: b.ChannelID, AgentName: b.Agent})
 		}
 		router := discord.NewRouter(bindings)
-		bot, err := discord.NewBot(cfg.Discord.Token, router, dispatcher, cfg.Discord.Global)
+		bot, err := discord.NewBot(cfg.Discord.Token, router, engine, cfg.Discord.Global)
 		if err != nil {
 			return err
 		}
@@ -164,12 +140,7 @@ func runServe(parent context.Context, cfg *Config, cfgPath string) error {
 	}
 
 	<-ctx.Done()
-	log.Printf("shutdown: stopping runners")
-	for _, r := range runners {
-		r.Stop()
-	}
-	for _, c := range closers {
-		_ = c()
-	}
+	log.Printf("shutdown: stopping engine")
+	engine.Stop()
 	return nil
 }

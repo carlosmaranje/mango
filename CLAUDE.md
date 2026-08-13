@@ -29,18 +29,42 @@ CLI (mango <cmd>)          Browser / Remote Client
 
 ---
 
-## Key Packages
+## Two Modules: `mango-core` + `mango`
+
+The repo is split into two Go modules:
+
+- **`core/` — `github.com/carlosmaranje/mango/core`**: a reusable, embeddable
+  multi-agent orchestration engine with **zero** knowledge of Discord, HTTP,
+  config files, or `MANGO_DIR`. Driven entirely through one input/output
+  contract (`core.Request` / `core.Result` / `core.Event`) and the `core.Engine`
+  facade. See [`core/README.md`](core/README.md). Wired into the app via a
+  `replace` directive in the root `go.mod`.
+- **`mango` (root module)**: the application — CLI, config, gateway, Discord bot,
+  concrete tools — built **on top of** `core`. It plugs its tools, LLM clients,
+  and composed personas into a `core.Engine`.
+
+### `mango-core` Packages (`core/`)
 
 | Package | Role |
 |---|---|
-| `cmd/app` | CLI entry point, Cobra commands, Unix socket HTTP client |
-| `internal/gateway` | Unix socket HTTP server + route handlers |
-| `internal/agent` | Agent struct, Registry, Runner goroutine loop |
-| `internal/orchestrator` | Task, Dispatcher, ReAct-style Orchestrator |
-| `internal/discord` | Discord bot + channel router |
-| `internal/llm` | LLM interface + Anthropic/OpenAI/Ollama clients |
-| `internal/memory` | SQLite key-value store per agent |
-| `internal/tools` | Tool interface, tool registry, built-in tools (GoSolarTool) |
+| `core` | Embeddable facade: `Engine`, `Request`, `Result`, `Event`, `Options`, `AgentSpec` |
+| `core/agent` | Agent struct, Registry, Runner goroutine loop (LLM + tool loop) |
+| `core/orchestrator` | Task, Dispatcher, ReAct-style Orchestrator, EventBus |
+| `core/llm` | LLM interface + Anthropic/OpenAI/Ollama clients |
+| `core/memory` | SQLite key-value store per agent (`Store` interface) |
+| `core/tools` | Tool interface + registry (ships **no** concrete tools) |
+
+### `mango` App Packages (`internal/`, `cmd/`)
+
+| Package | Role |
+|---|---|
+| `cmd/app` | CLI entry point, Cobra commands, Unix socket HTTP client; builds the `core.Engine` |
+| `internal/gateway` | Unix socket / HTTP server + route handlers (maps HTTP ⇄ `core.Engine`) |
+| `internal/discord` | Discord bot + channel router (drives `core.Engine`) |
+| `internal/agentdef` | Loads agent `.md` personas + composes system prompts from skills (MANGO_DIR) |
+| `internal/skill` | Skill definition loader (MANGO_DIR/skills) |
+| `internal/constants` | `MANGO_DIR` path resolution |
+| `internal/tools` | Concrete built-in tools (GoSolarTool, DateTimeTool, IdentityTool) plugged into core |
 
 ---
 

@@ -11,17 +11,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/carlosmaranje/mango/internal/agent"
-	"github.com/carlosmaranje/mango/internal/orchestrator"
+	"github.com/carlosmaranje/mango/core"
 )
 
 type Server struct {
 	socketPath string
 	httpAddr   string
-	registry   *agent.Registry
-	runners    map[string]*agent.Runner
-	dispatcher *orchestrator.Dispatcher
-	bus        *orchestrator.EventBus
+	engine     *core.Engine
 
 	httpSrv *http.Server
 	tcpSrv  *http.Server
@@ -29,20 +25,11 @@ type Server struct {
 	tcpLn   net.Listener
 }
 
-func NewServer(
-	socketPath, httpAddr string,
-	reg *agent.Registry,
-	runners map[string]*agent.Runner,
-	d *orchestrator.Dispatcher,
-	bus *orchestrator.EventBus,
-) *Server {
+func NewServer(socketPath, httpAddr string, engine *core.Engine) *Server {
 	return &Server{
 		socketPath: socketPath,
 		httpAddr:   httpAddr,
-		registry:   reg,
-		runners:    runners,
-		dispatcher: d,
-		bus:        bus,
+		engine:     engine,
 	}
 }
 

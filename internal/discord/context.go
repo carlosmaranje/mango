@@ -3,7 +3,7 @@ package discord
 import (
 	"sync"
 
-	"github.com/carlosmaranje/mango/internal/llm"
+	"github.com/carlosmaranje/mango/core"
 )
 
 const DefaultHistorySize = 100
@@ -11,17 +11,17 @@ const DefaultHistorySize = 100
 type ChannelHistory struct {
 	mu      sync.Mutex
 	size    int
-	buffers map[string][]llm.Message
+	buffers map[string][]core.Message
 }
 
 func NewChannelHistory(size int) *ChannelHistory {
 	if size <= 0 {
 		size = DefaultHistorySize
 	}
-	return &ChannelHistory{size: size, buffers: make(map[string][]llm.Message)}
+	return &ChannelHistory{size: size, buffers: make(map[string][]core.Message)}
 }
 
-func (c *ChannelHistory) Append(channelID string, msg llm.Message) {
+func (c *ChannelHistory) Append(channelID string, msg core.Message) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	buf := c.buffers[channelID]
@@ -32,11 +32,11 @@ func (c *ChannelHistory) Append(channelID string, msg llm.Message) {
 	c.buffers[channelID] = buf
 }
 
-func (c *ChannelHistory) Get(channelID string) []llm.Message {
+func (c *ChannelHistory) Get(channelID string) []core.Message {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	buf := c.buffers[channelID]
-	out := make([]llm.Message, len(buf))
+	out := make([]core.Message, len(buf))
 	copy(out, buf)
 	return out
 }

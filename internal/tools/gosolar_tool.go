@@ -8,6 +8,7 @@ import (
 	"math"
 
 	"github.com/carlosmaranje/gosolar"
+	coretools "github.com/carlosmaranje/mango/core/tools"
 )
 
 func decimalHoursToTime(decimalHours float64) string {
@@ -39,11 +40,11 @@ func (t *GoSolarTool) Description() string {
 }
 
 func (t *GoSolarTool) Returns() string {
-	return DescribeReturnType(SolarResult{})
+	return coretools.DescribeReturnType(SolarResult{})
 }
 
-func (t *GoSolarTool) Parameters() []Parameter {
-	return []Parameter{
+func (t *GoSolarTool) Parameters() []coretools.Parameter {
+	return []coretools.Parameter{
 		{
 			Name:        "latitude",
 			Type:        "number",

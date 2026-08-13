@@ -3,7 +3,7 @@ package discord
 import (
 	"testing"
 
-	"github.com/carlosmaranje/mango/internal/llm"
+	"github.com/carlosmaranje/mango/core"
 )
 
 func TestChannelHistory_DefaultSize(t *testing.T) {
@@ -19,8 +19,8 @@ func TestChannelHistory_DefaultSize(t *testing.T) {
 
 func TestChannelHistory_AppendAndGet(t *testing.T) {
 	h := NewChannelHistory(10)
-	h.Append("c", llm.Message{Role: "user", Content: "a"})
-	h.Append("c", llm.Message{Role: "assistant", Content: "b"})
+	h.Append("c", core.Message{Role: "user", Content: "a"})
+	h.Append("c", core.Message{Role: "assistant", Content: "b"})
 
 	got := h.Get("c")
 	if len(got) != 2 || got[0].Content != "a" || got[1].Content != "b" {
@@ -31,7 +31,7 @@ func TestChannelHistory_AppendAndGet(t *testing.T) {
 func TestChannelHistory_RingBuffer(t *testing.T) {
 	h := NewChannelHistory(3)
 	for _, c := range []string{"1", "2", "3", "4", "5"} {
-		h.Append("c", llm.Message{Role: "user", Content: c})
+		h.Append("c", core.Message{Role: "user", Content: c})
 	}
 	got := h.Get("c")
 	if len(got) != 3 {
@@ -44,8 +44,8 @@ func TestChannelHistory_RingBuffer(t *testing.T) {
 
 func TestChannelHistory_ChannelsIsolated(t *testing.T) {
 	h := NewChannelHistory(5)
-	h.Append("a", llm.Message{Role: "user", Content: "A"})
-	h.Append("b", llm.Message{Role: "user", Content: "B"})
+	h.Append("a", core.Message{Role: "user", Content: "A"})
+	h.Append("b", core.Message{Role: "user", Content: "B"})
 
 	if got := h.Get("a"); len(got) != 1 || got[0].Content != "A" {
 		t.Errorf("channel a bleed: %+v", got)
@@ -57,7 +57,7 @@ func TestChannelHistory_ChannelsIsolated(t *testing.T) {
 
 func TestChannelHistory_GetReturnsCopy(t *testing.T) {
 	h := NewChannelHistory(5)
-	h.Append("c", llm.Message{Role: "user", Content: "orig"})
+	h.Append("c", core.Message{Role: "user", Content: "orig"})
 
 	got := h.Get("c")
 	got[0].Content = "mutated"

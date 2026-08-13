@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/carlosmaranje/mango/internal/orchestrator"
+	"github.com/carlosmaranje/mango/core"
 )
 
 type agentStatus struct {
@@ -33,6 +33,35 @@ type taskResponse struct {
 	SessionID string `json:"session_id,omitempty"`
 	Result    string `json:"result,omitempty"`
 	Error     string `json:"error,omitempty"`
+}
+
+// taskDTO is the public, on-the-wire representation of a task. It preserves the
+// historical field names (agent_name, result) regardless of the core.Result
+// shape so existing REST/SSE clients keep working.
+type taskDTO struct {
+	ID        string    `json:"id"`
+	Goal      string    `json:"goal"`
+	AgentName string    `json:"agent_name,omitempty"`
+	SessionID string    `json:"session_id,omitempty"`
+	Status    string    `json:"status"`
+	Result    string    `json:"result,omitempty"`
+	Error     string    `json:"error,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func toTaskDTO(r *core.Result) taskDTO {
+	return taskDTO{
+		ID:        r.ID,
+		Goal:      r.Goal,
+		AgentName: r.Agent,
+		SessionID: r.SessionID,
+		Status:    string(r.Status),
+		Result:    r.Output,
+		Error:     r.Error,
+		CreatedAt: r.CreatedAt,
+		UpdatedAt: r.UpdatedAt,
+	}
 }
 
 func (s *Server) registerRoutes(mux *http.ServeMux) {
@@ -66,14 +95,10 @@ func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var out []agentStatus
-	for _, a := range s.registry.List() {
-		status := "stopped"
-		if runner, ok := s.runners[a.Name]; ok && runner.IsRunning() {
-			status = "running"
-		}
+	for _, a := range s.engine.Agents() {
 		out = append(out, agentStatus{
 			Name:   a.Name,
-			Status: status,
+			Status: a.Status,
 			Skills: a.Skills,
 		})
 	}
@@ -90,17 +115,13 @@ func (s *Server) handleAgentStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	runner, ok := s.runners[req.Name]
-	if !ok {
-		writeError(w, http.StatusNotFound, "agent not found")
-		return
-	}
-	if err := runner.Start(r.Context()); err != nil {
+	if err := s.engine.StartAgent(r.Context(), req.Name); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			writeError(w, http.StatusNotFound, "agent not found")
+			return
+		}
 		writeError(w, http.StatusConflict, err.Error())
 		return
-	}
-	if s.bus != nil {
-		s.bus.Emit(orchestrator.Event{Type: "agent.started", Payload: map[string]string{"name": req.Name}})
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"name": req.Name, "status": "running"})
 }
@@ -115,14 +136,9 @@ func (s *Server) handleAgentStop(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	runner, ok := s.runners[req.Name]
-	if !ok {
+	if err := s.engine.StopAgent(req.Name); err != nil {
 		writeError(w, http.StatusNotFound, "agent not found")
 		return
-	}
-	runner.Stop()
-	if s.bus != nil {
-		s.bus.Emit(orchestrator.Event{Type: "agent.stopped", Payload: map[string]string{"name": req.Name}})
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"name": req.Name, "status": "stopped"})
 }
@@ -139,14 +155,23 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "goal is required")
 			return
 		}
-		task, err := s.dispatcher.Submit(context.Background(), req.Goal, req.Agent, req.SessionID)
+		result, err := s.engine.Submit(context.Background(), core.Request{
+			Goal:      req.Goal,
+			Agent:     req.Agent,
+			SessionID: req.SessionID,
+		})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusAccepted, taskResponse{ID: task.ID, Status: task.Status})
+		writeJSON(w, http.StatusAccepted, taskResponse{ID: result.ID, Status: string(result.Status)})
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, s.dispatcher.List())
+		results := s.engine.List()
+		out := make([]taskDTO, 0, len(results))
+		for _, r := range results {
+			out = append(out, toTaskDTO(r))
+		}
+		writeJSON(w, http.StatusOK, out)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
@@ -161,20 +186,20 @@ func (s *Server) handleTaskByID(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		task, ok := s.dispatcher.Get(id)
+		result, ok := s.engine.Get(id)
 		if !ok {
 			writeError(w, http.StatusNotFound, "task not found")
 			return
 		}
 		writeJSON(w, http.StatusOK, taskResponse{
-			ID:     task.ID,
-			Status: task.Status,
-			Result: task.Result,
-			Error:  task.Error,
+			ID:     result.ID,
+			Status: string(result.Status),
+			Result: result.Output,
+			Error:  result.Error,
 		})
 
 	case http.MethodDelete:
-		task, err := s.dispatcher.Cancel(id)
+		result, err := s.engine.Cancel(id)
 		if err != nil {
 			switch err.Error() {
 			case "task not found":
@@ -184,7 +209,7 @@ func (s *Server) handleTaskByID(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		writeJSON(w, http.StatusOK, taskResponse{ID: task.ID, Status: task.Status})
+		writeJSON(w, http.StatusOK, taskResponse{ID: result.ID, Status: string(result.Status)})
 
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -210,23 +235,22 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	// Route directly to the first non-orchestrator agent so chat bypasses
 	// the orchestrator decomposition loop and goes straight to a tool-enabled worker.
 	if req.Agent == "" {
-		req.Agent = s.dispatcher.DefaultAgentName()
+		req.Agent = s.engine.DefaultAgent()
 	}
-	task, err := s.dispatcher.Submit(r.Context(), req.Goal, req.Agent, req.SessionID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	result, err := s.dispatcher.Wait(r.Context(), task.ID)
+	result, err := s.engine.SubmitAndWait(r.Context(), core.Request{
+		Goal:      req.Goal,
+		Agent:     req.Agent,
+		SessionID: req.SessionID,
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, taskResponse{
 		ID:        result.ID,
-		Status:    result.Status,
+		Status:    string(result.Status),
 		SessionID: result.SessionID,
-		Result:    result.Result,
+		Result:    result.Output,
 		Error:     result.Error,
 	})
 }
@@ -235,10 +259,6 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	if s.bus == nil {
-		writeError(w, http.StatusServiceUnavailable, "event bus not available")
 		return
 	}
 	flusher, ok := w.(http.Flusher)
@@ -251,8 +271,8 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	id, ch := s.bus.Subscribe()
-	defer s.bus.Unsubscribe(id)
+	unsubscribe, events := s.engine.Subscribe()
+	defer unsubscribe()
 
 	ping := time.NewTicker(15 * time.Second)
 	defer ping.Stop()
@@ -264,18 +284,40 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 			return
-		case e := <-ch:
-			data, err := json.Marshal(e.Payload)
+		case e, ok := <-events:
+			if !ok {
+				return
+			}
+			data, err := marshalEvent(e)
 			if err != nil {
 				continue
 			}
-			writeSSE(w, e.Type, string(data))
+			writeSSE(w, string(e.Type), data)
 			flusher.Flush()
 		case <-ping.C:
 			writeSSE(w, "ping", "{}")
 			flusher.Flush()
 		}
 	}
+}
+
+// marshalEvent renders a core.Event payload in the historical SSE shape: task.*
+// events carry the full task object; agent.* events carry {"name": ...}.
+func marshalEvent(e core.Event) (string, error) {
+	var payload any
+	switch {
+	case e.Task != nil:
+		payload = toTaskDTO(e.Task)
+	case e.Agent != "":
+		payload = map[string]string{"name": e.Agent}
+	default:
+		payload = map[string]any{}
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
 
 func writeSSE(w http.ResponseWriter, event, data string) {

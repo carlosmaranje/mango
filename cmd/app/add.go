@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/carlosmaranje/mango/internal/agent"
+	"github.com/carlosmaranje/mango/internal/agentdef"
 	"github.com/carlosmaranje/mango/internal/skill"
 )
 
@@ -57,8 +57,8 @@ func newAddSkillCmd() *cobra.Command {
 
 // runAddAgent handles the interactive agent scaffolding flow.
 func runAddAgent(name string, in *bufio.Reader, out io.Writer) error {
-	agentsDir := agent.ResolveAgentsDir()
-	path := agent.AgentDefinitionPath(agentsDir, name)
+	agentsDir := agentdef.ResolveAgentsDir()
+	path := agentdef.AgentDefinitionPath(agentsDir, name)
 
 	if _, err := os.Stat(path); err == nil {
 		return fmt.Errorf("agent %q already exists at %s", name, path)

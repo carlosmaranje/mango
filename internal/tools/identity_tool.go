@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	coretools "github.com/carlosmaranje/mango/core/tools"
 	"os"
 	"runtime"
 	"time"
@@ -31,7 +32,7 @@ func (t *IdentityTool) Description() string {
 	return "Returns information about this running instance: hostname, agent name, socket path, config path, working directory, OS, and uptime. Use when asked 'where are you running', 'what instance is this', or similar self-identification questions."
 }
 
-func (t *IdentityTool) Parameters() []Parameter { return nil }
+func (t *IdentityTool) Parameters() []coretools.Parameter { return nil }
 
 type IdentityResult struct {
 	AgentName  string `json:"agent_name"`
@@ -45,7 +46,7 @@ type IdentityResult struct {
 }
 
 func (t *IdentityTool) Returns() string {
-	return DescribeReturnType(IdentityResult{})
+	return coretools.DescribeReturnType(IdentityResult{})
 }
 
 func (t *IdentityTool) Execute(_ context.Context, _ string) (string, error) {

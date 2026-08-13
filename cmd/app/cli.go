@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/carlosmaranje/mango/internal/agent"
+	"github.com/carlosmaranje/mango/internal/agentdef"
 )
 
 func newStatusCmd() *cobra.Command {
@@ -237,8 +237,8 @@ func newAgentCreateCmd() *cobra.Command {
 				return fmt.Errorf("agent name cannot be empty")
 			}
 
-			dir := agent.ResolveAgentsDir()
-			path := agent.AgentDefinitionPath(dir, name)
+			dir := agentdef.ResolveAgentsDir()
+			path := agentdef.AgentDefinitionPath(dir, name)
 
 			if _, err := os.Stat(path); err == nil {
 				return fmt.Errorf("agent %q already exists at %s", name, path)

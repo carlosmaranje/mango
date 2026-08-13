@@ -10,7 +10,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 
-	"github.com/carlosmaranje/mango/internal/orchestrator"
+	"github.com/carlosmaranje/mango/core"
 )
 
 const (
@@ -23,14 +23,14 @@ const processedMsgTTL = 5 * time.Minute
 type Bot struct {
 	session       *discordgo.Session
 	router        *Router
-	dispatcher    *orchestrator.Dispatcher
+	engine        *core.Engine
 	global        bool
 	ctx           context.Context
 	mu            sync.Mutex
 	processedMsgs map[string]time.Time
 }
 
-func NewBot(token string, router *Router, dispatcher *orchestrator.Dispatcher, global bool) (*Bot, error) {
+func NewBot(token string, router *Router, engine *core.Engine, global bool) (*Bot, error) {
 	sess, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, fmt.Errorf("discord session: %w", err)
@@ -40,7 +40,7 @@ func NewBot(token string, router *Router, dispatcher *orchestrator.Dispatcher, g
 	b := &Bot{
 		session:       sess,
 		router:        router,
-		dispatcher:    dispatcher,
+		engine:        engine,
 		global:        global,
 		processedMsgs: make(map[string]time.Time),
 	}
@@ -146,7 +146,11 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		content = strings.TrimSpace(content)
 	}
 
-	task, err := b.dispatcher.Submit(b.ctx, content, agentName, m.ChannelID)
+	task, err := b.engine.Submit(b.ctx, core.Request{
+		Goal:      content,
+		Agent:     agentName,
+		SessionID: m.ChannelID,
+	})
 	if err != nil {
 		log.Printf("discord: dispatch: %v", err)
 		_, _ = s.ChannelMessageSendReply(m.ChannelID, "error: "+err.Error(), m.Reference())
@@ -189,13 +193,13 @@ func (b *Bot) waitAndReply(s *discordgo.Session, m *discordgo.MessageCreate, tas
 			return
 		case <-ticker.C:
 		}
-		t, ok := b.dispatcher.Get(taskID)
+		t, ok := b.engine.Get(taskID)
 		if !ok {
 			return
 		}
-		if t.Status == orchestrator.StatusDone || t.Status == orchestrator.StatusFailed {
-			reply := t.Result
-			if t.Status == orchestrator.StatusFailed {
+		if t.Status == core.StatusDone || t.Status == core.StatusFailed {
+			reply := t.Output
+			if t.Status == core.StatusFailed {
 				reply = "error: " + t.Error
 			}
 			if _, err := s.ChannelMessageSendReply(m.ChannelID, reply, m.Reference()); err != nil {

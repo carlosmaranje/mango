@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	coretools "github.com/carlosmaranje/mango/core/tools"
 )
 
 type DateTimeTool struct{}
@@ -20,8 +22,8 @@ func (d *DateTimeTool) Description() string {
 		and you are unsure of the date, call this tool first to resolve the calendar context`
 }
 
-func (d *DateTimeTool) Parameters() []Parameter {
-	return []Parameter{
+func (d *DateTimeTool) Parameters() []coretools.Parameter {
+	return []coretools.Parameter{
 		{
 			Name:        "timezone",
 			Type:        "string",
@@ -66,7 +68,7 @@ type DateTimeResult struct {
 }
 
 func (d *DateTimeTool) Returns() string {
-	return DescribeReturnType(DateTimeResult{})
+	return coretools.DescribeReturnType(DateTimeResult{})
 }
 
 // daysUntil returns how many days from `from` until the next occurrence of `target` weekday.
